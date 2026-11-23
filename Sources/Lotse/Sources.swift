@@ -175,6 +175,10 @@ final class ClaudeSource {
     private var timer: Timer?
     private var plans: [String: [(text: String, status: String)]] = [:]
 
+    /// Hintergrund-Befehle je Session (was, seit wann) und Sessions, deren Durchgang damit endete.
+    private var background: [String: (what: String, since: Date)] = [:]
+    private var resumed = Set<String>()
+
     static let base = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/Lotse")
     static let events = base.appendingPathComponent("events")
@@ -342,11 +346,18 @@ final class ClaudeSource {
                 else if let m = j["model"] as? String { pendingModels[sid] = Self.pretty(model: m) }
             }
         case "UserPromptSubmit":
+            if resumed.remove(sid) != nil { background[sid] = nil }
             update(.working, message: "", front: true, refresh: true) { s in
                 s.detail = ""; s.summary = ""; s.doneAt = nil; s.tookSeconds = nil; s.startedAt = Date()
                 if let m = self.pendingModels[sid], s.model.isEmpty { s.model = m }
             }
         case "PreToolUse":
+            // Der Durchgang läuft wieder: Was vorher im Hintergrund lief, hat sich gemeldet.
+            if resumed.remove(sid) != nil { background[sid] = nil }
+            // Befehle, die Claude in den Hintergrund schickt (z. B. ein Rendern), laufen über das Ende des Durchgangs hinaus.
+            if tool == "Bash", input["run_in_background"] as? Bool == true {
+                background[sid] = (input["description"] as? String ?? "Befehl", Date())
+            }
             let plan = plan(sid, tool: tool, input: input)
             update(model.asks.contains { $0.sessionID == sid } ? nil : .working) { s in
                 if let plan { s.planDone = plan.done; s.planTotal = plan.total; s.planStep = plan.step }
@@ -411,10 +422,17 @@ final class ClaudeSource {
             // Nur blitzschnelle Antworten (unter 5 s) klappen die Insel nicht auf.
             let quick = before != nil && Date().timeIntervalSince(started) < 5
             model.asks.removeAll { $0.sessionID == sid }
-            let background = (j["background_tasks"] as? [[String: Any]])?.contains { ($0["status"] as? String) != "completed" } ?? false
-            if background {
-                // Der Turn ist zu Ende, aber Agenten/Befehle laufen noch – das ist nicht „fertig“.
-                update(.working, message: "", refresh: true) { s in s.detail = "wartet auf Hintergrundarbeit" }
+            let reported = (j["background_tasks"] as? [[String: Any]])?.contains { ($0["status"] as? String) != "completed" } ?? false
+            // Selbst gemerkt: ein Hintergrund-Befehl aus diesem Durchgang, höchstens 45 Minuten alt.
+            let own = background[sid].flatMap { Date().timeIntervalSince($0.since) < 45 * 60 ? $0.what : nil }
+            if reported || own != nil {
+                // Der Durchgang ist zu Ende, aber im Hintergrund läuft noch etwas – das ist nicht „fertig“.
+                resumed.insert(sid)
+                update(.working, message: "", refresh: true) { s in
+                    s.detail = own.map { "Im Hintergrund: \($0)" } ?? "wartet auf Hintergrundarbeit"
+                    s.planStep = ""
+                }
+                log("Claude-Session wartet auf Hintergrundarbeit\(own.map { ": " + $0 } ?? "")")
                 break
             }
             let took = max(1, Int(Date().timeIntervalSince(started)))
@@ -834,6 +852,13 @@ final class NotificationSource {
         var route = NoticeArchive.userInfo(req["usda"] as? Data)["route"] as? String ?? ""
         let ident = req["iden"] as? String ?? ""
         func tail(after prefix: String) -> String { String(ident.dropFirst(prefix.count)) }
+        // Code-Sessions auf diesem Mac: Die App nennt die Session in der Kennung („idle-local_…") – direkt dorthin springen.
+        let thread = req["thre"] as? String ?? ""
+        var local: String?
+        for text in [ident, thread] where local == nil {
+            if let r = text.range(of: "local_[A-Za-z0-9-]{1,64}$", options: .regularExpression) { local = String(text[r]) }
+        }
+        if let local, let url = URL(string: "claude://code/continue?session=\(local)&source=url_external") { return url }
         if route.isEmpty {
             if ident.hasPrefix("hub-awaiting-") { route = "/chat/" + tail(after: "hub-awaiting-") }
             else if ident.hasPrefix("cowork-idle-") { route = "/cowork/" + tail(after: "cowork-idle-") }
@@ -842,7 +867,7 @@ final class NotificationSource {
             }
         }
         // Nur bekannte, harmlose Routen öffnen.
-        guard route.range(of: "^/(chat|cowork|project)/[A-Za-z0-9_-]{6,80}$", options: .regularExpression) != nil else { return nil }
+        guard route.range(of: "^/(chat|cowork|project|epitaxy)/[A-Za-z0-9_-]{6,80}$", options: .regularExpression) != nil else { return nil }
         return URL(string: "claude://claude.ai" + route)
     }
 

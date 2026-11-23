@@ -89,6 +89,11 @@ enum Probe {
     nonisolated(unsafe) static var setupStep = 0
 }
 
+private struct TrailWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 private struct SeaKey: EnvironmentKey { static let defaultValue = 0 }
 extension EnvironmentValues {
     var sea: Int {
@@ -353,6 +358,7 @@ struct Mascot: View {
     var lit = true
     @SwiftUI.State private var settled = false
     @Environment(\.sea) private var sea
+    @Environment(\.displayScale) private var scale
 
     /// Wartet Claude auf dich, steht statt des Boots ein Leuchtturm da – sein Licht schwenkt hin und her.
     private static let tower = [
@@ -431,13 +437,24 @@ struct Mascot: View {
         Canvas { ctx, sz in
             let art = state == .waiting ? Self.tower : Self.boat
             let cols = CGFloat(Self.boat[0].count), rows = CGFloat(Self.boat.count + 2)
+            // Kleine Boote dürfen halbe Schritte nehmen (1,5 Punkt je Kästchen): Die Kästchen rasten dann einzeln auf
+            // ganze Punkte ein und bleiben auch auf einem Bildschirm ohne Retina scharf.
             let px = min(sz.width / cols, sz.height / rows).rounded(.down)
-            let ox = (sz.width - px * cols) / 2
-            let oy = (sz.height - px * rows) / 2 + px
+            // Zwischen den Kästchen bleibt ein schmaler Spalt – so sieht das Boot aus wie im App-Symbol.
+            // Der Spalt ist ein Bildschirmpixel breit; bei ganz kleinen Booten ohne Retina wird er nur abgedunkelt,
+            // sonst bliebe vom Kästchen zu wenig übrig.
+            let hair = 1 / max(1, scale)
+            let soft = px - hair < 1.4 && scale < 2
+            let gap = px < 2 ? 0 : (px >= 5 ? (px * 0.16 * scale).rounded() / scale : hair)
+            let ox = ((sz.width - px * cols) / 2).rounded()
+            let oy = ((sz.height - px * rows) / 2 + px).rounded()
             var bob = 0
             if state == .sailing { bob = [0, -1, 0, 1][frame % 4] }
             func dot(_ x: Int, _ y: Int, _ color: Color) {
-                ctx.fill(Path(CGRect(x: ox + CGFloat(x) * px, y: oy + CGFloat(y) * px, width: px, height: px)), with: .color(color))
+                let x0 = (ox + CGFloat(x) * px).rounded(), x1 = (ox + CGFloat(x + 1) * px).rounded()
+                let y0 = (oy + CGFloat(y) * px).rounded(), y1 = (oy + CGFloat(y + 1) * px).rounded()
+                if soft, gap > 0 { ctx.fill(Path(CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)), with: .color(color.opacity(0.42))) }
+                ctx.fill(Path(CGRect(x: x0, y: y0, width: x1 - x0 - gap, height: y1 - y0 - gap)), with: .color(color))
             }
             let fade = state == .idle && !bright ? 0.82 : 1.0
             if shift != 99 {
@@ -481,7 +498,7 @@ struct Mascot: View {
             if sea >= 1, lit, (printing ?? 1) >= 1, state != .waiting {
                 let crest = Self.waves[(moving ? frame + 1 : 1) % 3]
                 for (x, c) in crest.enumerated() where c == "w" && (x + frame) % 3 == 0 {
-                    dot(x, Self.boat.count - 1, Color.white.opacity(0.5))
+                    dot(x, Self.boat.count + 1, Color.white.opacity(0.5))
                 }
             }
         }
@@ -507,10 +524,12 @@ struct IslandView: View {
             let w = ceil((s.text as NSString).size(withAttributes: [.font: NSFont.menuBarFont(ofSize: 0)]).width)
             let trail = TopRow.hasTrail(model)
             if s.text.isEmpty, !trail { return 80 }                                     // nur das Boot
-            var chrome: CGFloat = 84                                                    // Ränder, Boot, Abstände
-            if trail { chrome += model.focusRunning && model.unread == 0 && !model.discreet ? 70 : 52 }
-            // Auf 16er-Schritte runden, damit die Pille nicht bei jedem neuen Wort zuckt.
-            return min(max(s.text.isEmpty ? 128 : 176, ((w + chrome) / 16).rounded(.up) * 16), 520)
+            var chrome: CGFloat = 79                                                    // Ränder 44, Boot 25, Abstand 8, 2 Luft
+            // Rechts genau so viel Platz, wie Laufzeit, Zähler oder Timer wirklich brauchen (gemessen) – so ist der
+            // Abstand zwischen Text und Laufzeit derselbe wie zwischen Boot und Text.
+            if trail { chrome += 8 + (model.trailWidth > 0 ? model.trailWidth : (model.focusRunning && model.unread == 0 && !model.discreet ? 52 : 30)) }
+            if s.text.isEmpty { chrome -= 8 }
+            return min(max(120, ceil(w + chrome)), 520)
         }
     }
 
@@ -848,7 +867,10 @@ struct TopRow: View {
         if let s = model.sessions.first(where: { $0.status == .waiting }) {
             return Status(text: hide ? "Claude braucht dich" : "Claude braucht dich · \(s.project)", short: "Claude", color: Theme.accent, pulsing: true)
         }
-        if let e = model.nextEvent, e.start.timeIntervalSince(model.now) < 3600 {
+        let busy = model.sessions.contains { $0.status == .working }
+        // Arbeitet Claude, zeigt die Pille, woran – der nächste Termin drängt sich erst fünf Minuten vorher vor.
+        if let e = model.nextEvent, e.start.timeIntervalSince(model.now) < (busy ? 300 : 3600),
+           !busy || e.start.timeIntervalSince(model.now) > -60 {
             let t = Fmt.until(e.start, now: model.now)
             return Status(text: hide ? "Termin \(t)" : "\(e.title) \(t)", short: t, color: Theme.accent, pulsing: e.start.timeIntervalSince(model.now) < 300)
         }
@@ -886,11 +908,22 @@ struct TopRow: View {
         HStack(spacing: 8) {
             if model.mode == .compact, !model.hasNotch, status.text.isEmpty, !Self.hasTrail(model) {
                 // Nichts zu melden: nur das Boot, mittig.
-                Mascot(size: 19, state: boat).frame(maxWidth: .infinity)
+                Mascot(size: 25, state: boat).frame(maxWidth: .infinity)
             } else {
                 if model.mode == .expanded { tabs } else { lead }
-                Spacer(minLength: model.hasNotch ? model.notchWidth : 10)
-                trail
+                if model.mode == .compact, !model.hasNotch {
+                    // Zugeklappt ohne Notch: Die Laufzeit rückt bis auf denselben Abstand an den Text heran,
+                    // den auch das Boot zum Text hat. Der Text darf sich zuerst ausbreiten.
+                    trail.fixedSize()
+                        .background(GeometryReader { g in Color.clear.preference(key: TrailWidthKey.self, value: g.size.width) })
+                        .onPreferenceChange(TrailWidthKey.self) { w in
+                            if abs(w - model.trailWidth) > 0.5 { DispatchQueue.main.async { model.trailWidth = w } }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                } else {
+                    Spacer(minLength: model.hasNotch ? model.notchWidth : 10)
+                    trail
+                }
             }
         }
         .padding(.horizontal, model.mode == .expanded ? 18 : 22)
@@ -902,7 +935,7 @@ struct TopRow: View {
             Cover(image: t.artwork, size: 16, radius: 4)
         } else if model.mode == .compact {
             // Das Boot ist die Statusanzeige der Ruhe-Pille: segelt = Claude arbeitet, Flagge = wartet auf dich.
-            Mascot(size: 19, state: boat)
+            Mascot(size: 25, state: boat)
         } else {
             Dot(color: s.color, pulsing: s.pulsing).id("\(s.pulsing)-\(model.mode == .peek)")
         }
@@ -910,6 +943,7 @@ struct TopRow: View {
             .font(Theme.bar).foregroundStyle(Theme.text).lineLimit(1)
             // Am Notch darf der Text nur den linken Flügel füllen.
             .frame(maxWidth: model.hasNotch ? max(60, (model.pillSize.width - model.notchWidth) / 2 - 56) : nil, alignment: .leading)
+            .layoutPriority(1)
     }
 
     private var boat: Mascot.State {
@@ -1771,6 +1805,16 @@ struct ClaudeTile: View {
             VStack(alignment: .leading, spacing: 12) {
                 if let ask = model.asks.first {
                     AskScene(model: model, ask: ask)
+                } else if model.sessions.count > 1 {
+                    // Mehrere Sessions: jede bekommt dieselbe Bahn – Status, woran sie arbeitet, Strecke und Laufzeit.
+                    ForEach(Array(lanes.prefix(5).enumerated()), id: \.element.id) { i, s in
+                        if i > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
+                        Button { model.openSession?(s) } label: { lane(s) }.buttonStyle(.plain)
+                    }
+                    if lanes.count > 5 {
+                        Text(lanes.count == 6 ? "und 1 weitere Session" : "und \(lanes.count - 5) weitere Sessions")
+                            .font(Theme.font(11)).foregroundStyle(Theme.faint)
+                    }
                 } else if let s = lead {
                     Button { model.openSession?(s) } label: {
                         if s.status == .done, !s.summary.isEmpty, !model.silent {
@@ -1783,10 +1827,10 @@ struct ClaudeTile: View {
                 }
                 let shown = model.asks.first?.sessionID ?? lead?.id
                 // Solange eine Freigabe zu sehen ist, bleibt die Kachel kompakt.
-                let rest = model.sessions.filter { $0.id != shown }.prefix(model.asks.isEmpty ? 4 : 1)
+                let rest = model.asks.isEmpty && model.sessions.count > 1 ? [] : Array(model.sessions.filter { $0.id != shown }.prefix(model.asks.isEmpty ? 4 : 1))
                 if !rest.isEmpty {
                     Rectangle().fill(Theme.line).frame(height: 1)
-                    ForEach(Array(rest)) { s in
+                    ForEach(rest) { s in
                         Button { model.openSession?(s) } label: { row(s) }.buttonStyle(.plain)
                     }
                     let hidden = model.sessions.count - 1 - rest.count
@@ -1811,6 +1855,51 @@ struct ClaudeTile: View {
                 }
             }
         }
+    }
+
+    /// Reihenfolge der Bahnen: erst wer dich braucht, dann wer arbeitet, zuletzt Fertiges.
+    private var lanes: [ClaudeSession] {
+        func rank(_ s: ClaudeSession) -> Int { s.status == .waiting ? 0 : s.status == .working ? 1 : 2 }
+        return model.sessions.enumerated().sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }.map(\.element)
+    }
+
+    /// Eine Bahn: links das Boot als Status, in der Mitte Projekt und Tätigkeit, rechts Strecke, Schritt und Laufzeit.
+    private func lane(_ s: ClaudeSession) -> some View {
+        let waiting = s.status == .waiting
+        let second = waiting ? (s.message.isEmpty ? "Wartet auf deine Eingabe." : s.message)
+            : s.status == .working ? s.detail : (s.summary.isEmpty ? "" : s.summary)
+        return HStack(alignment: .center, spacing: 11) {
+            Mascot(size: 25, state: s.status == .working ? .sailing : waiting ? .waiting : .idle)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 7) {
+                    Text(s.project).font(Theme.font(13, .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                    Text(sentence(s)).font(Theme.font(12)).foregroundStyle(waiting ? Theme.accent : Theme.muted).lineLimit(1)
+                }
+                if !second.isEmpty {
+                    Text(second).font(Theme.font(11)).foregroundStyle(Theme.faint).lineLimit(1).truncationMode(.tail)
+                }
+            }
+            .layoutPriority(1)
+            Spacer(minLength: 8)
+            if s.status == .working {
+                if s.planTotal > 1 {
+                    Course(done: s.planDone, total: s.planTotal).frame(width: 78, height: 12)
+                    Text("\(min(s.planDone + 1, s.planTotal))/\(s.planTotal)").font(Theme.font(11)).monospacedDigit()
+                        .foregroundStyle(Theme.muted).frame(width: 30, alignment: .trailing)
+                }
+                if let since = s.startedAt {
+                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                        Text(Fmt.elapsed(ctx.date.timeIntervalSince(since))).font(Theme.font(11)).monospacedDigit()
+                            .foregroundStyle(Theme.soft).frame(width: 44, alignment: .trailing)
+                    }
+                }
+            } else {
+                Text(Fmt.ago(s.updated, now: model.now)).font(Theme.font(11)).monospacedDigit().foregroundStyle(Theme.faint)
+            }
+        }
+        .padding(.vertical, 1)
+        .contentShape(Rectangle())
+        .opacity(s.status == .done ? 0.78 : 1)
     }
 
     /// „Heute: 4,3 Mio. Tokens · 6 Sessions · 812 Werkzeug-Aufrufe · am meisten in Lotse"
@@ -1882,7 +1971,7 @@ struct ClaudeTile: View {
     /// Weitere Sessions: eine Zeile mit kleinem Boot.
     private func row(_ s: ClaudeSession) -> some View {
         HStack(spacing: 9) {
-            Mascot(size: 18, state: s.status == .working ? .sailing : s.status == .waiting ? .waiting : .idle)
+            Mascot(size: 25, state: s.status == .working ? .sailing : s.status == .waiting ? .waiting : .idle)
             Text(s.project).font(Theme.font(12, .medium)).foregroundStyle(Theme.text).lineLimit(1)
             Text(s.status == .working && !s.detail.isEmpty ? s.detail : sentence(s))
                 .font(Theme.font(12)).foregroundStyle(s.status == .waiting ? Theme.accent : Theme.muted).lineLimit(1)
@@ -1902,6 +1991,39 @@ struct ClaudeTile: View {
             }
         }
         .contentShape(Rectangle())
+    }
+}
+
+/// Die Strecke in klein, für die Bahnen: gestrichelte Wasserlinie, eine Boje je Schritt, ein heller Punkt für die Position.
+struct Course: View {
+    var done: Int
+    var total: Int
+
+    var body: some View {
+        Canvas { g, size in
+            let u: CGFloat = 2, y = (size.height - u).rounded()
+            let w = size.width - u
+            func dot(_ x: CGFloat, _ yy: CGFloat, _ c: Color, _ s: CGFloat = 2) {
+                g.fill(Path(CGRect(x: (x / u).rounded() * u, y: yy, width: s, height: s)), with: .color(c))
+            }
+            var x: CGFloat = 0
+            while x <= w { dot(x, y, Color.white.opacity(0.20)); x += 2 * u }
+            let n = max(total, 1)
+            if total <= 12 {
+                for step in 0...n {
+                    let bx = w * CGFloat(step) / CGFloat(n)
+                    let reached = step <= done
+                    dot(bx, y - u, reached ? Theme.accent : Color.white.opacity(0.38))
+                    dot(bx, y - 2 * u, reached ? Theme.accent : Color.white.opacity(0.38))
+                }
+            }
+            // Zurückgelegtes Stück und Position: mitten im laufenden Schritt.
+            let p = min(1, (CGFloat(min(done, total)) + (done >= total ? 0 : 0.5)) / CGFloat(n))
+            var fx: CGFloat = 0
+            while fx <= w * p { dot(fx, y, Theme.accent.opacity(0.85)); fx += u }
+            dot(w * p - u, y - 3 * u, Theme.text, 4); dot(w * p - u, y - u, Theme.text, 4)
+        }
+        .accessibilityLabel("Schritt \(min(done + 1, max(total, 1))) von \(total)")
     }
 }
 

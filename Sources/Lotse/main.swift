@@ -309,9 +309,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// Das Pixel-Segelboot für die Menüleiste – dasselbe Boot wie in der Insel, einfarbig, damit macOS es
+    /// je nach heller oder dunkler Menüleiste selbst einfärbt.
+    private static func menuBoat() -> NSImage {
+        let art = ["......S.....", "......SS....", "......SSS...", "...s..SSSS..", "..ss..SSSSS.", ".sss..SSSSS.",
+                   "......M.....", "HHHHHHHHHHHH", ".HHHHHHHHHH.", "..hhhhhhhh.."]
+        let px: CGFloat = 2, w = 24.0, h = 20.0
+        let hair = 1 / (NSScreen.main?.backingScaleFactor ?? 2)
+        let img = NSImage(size: NSSize(width: w, height: h), flipped: true) { _ in
+            for (y, row) in art.enumerated() {
+                for (x, c) in row.enumerated() where c != "." {
+                    // Kästchen rasten einzeln auf ganze Punkte ein: scharf auch ohne Retina.
+                    let x0 = (CGFloat(x) * px).rounded(), x1 = (CGFloat(x + 1) * px).rounded()
+                    let y0 = (CGFloat(y) * px).rounded(), y1 = (CGFloat(y + 1) * px).rounded()
+                    // Schmaler Spalt zwischen den Kästchen wie im App-Symbol; ohne Retina nur abgedunkelt.
+                    let a: CGFloat = c == "s" || c == "h" ? 0.62 : 1
+                    if hair >= 1 { NSColor.black.withAlphaComponent(a * 0.42).setFill(); NSRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0).fill() }
+                    NSColor.black.withAlphaComponent(a).setFill()
+                    NSRect(x: x0, y: y0, width: x1 - x0 - hair, height: y1 - y0 - hair).fill()
+                }
+            }
+            return true
+        }
+        img.isTemplate = true
+        img.accessibilityDescription = "Lotse"
+        return img
+    }
+
     private func setupMenu() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "sailboat.fill", accessibilityDescription: "Lotse")
+        item.button?.image = Self.menuBoat()
         let menu = NSMenu()
         // Das Menü bleibt kurz: Alles Einstellbare steht im Einstellungsfenster. Nur der Besprechungsmodus
         // ist hier direkt erreichbar, weil man ihn mitten im Call schnell braucht.
@@ -570,12 +597,21 @@ enum Demo {
         default: m.mode = .expanded; tall = true
         }
 
+        // Für Filmmaterial: LOTSE_W / LOTSE_H (Breite und Höhe in Punkt), LOTSE_SCALE (Auflösung), LOTSE_BG=dark|flat|key (Hintergrund).
+        let env = ProcessInfo.processInfo.environment
+        let height = env["LOTSE_H"].flatMap { Double($0) }.map { CGFloat($0) } ?? (tall ? 560 : 280)
+        let wall: [Color]
+        switch env["LOTSE_BG"] ?? "" {
+        case "dark": wall = [Color(red: 0.17, green: 0.16, blue: 0.155), Color(red: 0.115, green: 0.11, blue: 0.105), Color(red: 0.075, green: 0.07, blue: 0.07)]
+        case "flat": wall = [Color(red: 0.082, green: 0.078, blue: 0.075), Color(red: 0.082, green: 0.078, blue: 0.075)]
+        case "key": wall = [Color(red: 1, green: 0, blue: 1), Color(red: 1, green: 0, blue: 1)]
+        default: wall = [Color(red: 0.55, green: 0.62, blue: 0.78), Color(red: 0.80, green: 0.62, blue: 0.55), Color(red: 0.30, green: 0.36, blue: 0.50)]
+        }
         let view = IslandView(model: m)
-            .frame(width: 900, height: tall ? 560 : 280)
-            .background(LinearGradient(colors: [Color(red: 0.55, green: 0.62, blue: 0.78), Color(red: 0.80, green: 0.62, blue: 0.55), Color(red: 0.30, green: 0.36, blue: 0.50)],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing))
+            .frame(width: env["LOTSE_W"].flatMap { Double($0) }.map { CGFloat($0) } ?? 900, height: height)
+            .background(LinearGradient(colors: wall, startPoint: .topLeading, endPoint: .bottomTrailing))
         let r = ImageRenderer(content: view)
-        r.scale = 2
+        r.scale = env["LOTSE_SCALE"].flatMap { Double($0) }.map { CGFloat($0) } ?? 2
         if let img = r.nsImage, let tiff = img.tiffRepresentation,
            let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
             try? png.write(to: URL(fileURLWithPath: path))

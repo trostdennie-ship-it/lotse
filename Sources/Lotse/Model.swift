@@ -380,6 +380,8 @@ final class IslandModel: ObservableObject {
 
     /// Aktuelle Größe der Insel, vom View gemeldet – für die Maus-Erkennung.
     var pillSize: CGSize = CGSize(width: 310, height: 28)
+    /// Gemessene Breite dessen, was rechts in der Ruhe-Pille steht (Laufzeit, Zähler, Timer).
+    @Published var trailWidth: CGFloat = 0
     var musicAction: ((String) -> Void)?
     var answer: ((PermissionAsk, String) -> Void)?
     var openSession: ((ClaudeSession) -> Void)?
@@ -602,8 +604,8 @@ final class IslandModel: ObservableObject {
 
     func open(_ notice: Notice) {
         if let sid = notice.sessionID, let s = sessions.first(where: { $0.id == sid }) { openSession?(s) }
-        else if let url = notice.url { NSWorkspace.shared.open(url) }
-        else if let id = notice.appID { Apps.activate(id) }
+        else if let url = notice.url { log("Öffne \(url.scheme ?? "")://\(url.host ?? "")\(url.path.prefix(24))…"); NSWorkspace.shared.open(url) }
+        else if let id = notice.appID { log("Öffne App \(id) (Mitteilung ohne Ziel)"); Apps.activate(id) }
         notices.removeAll { $0.id == notice.id }
     }
 
