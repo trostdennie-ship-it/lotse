@@ -293,8 +293,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         model.openSetup = { [weak self] in self?.onboarding.show() }
         let usage = UsageSource(model: model)
         cal.start(); claude.start(); notes.start(); music.start(); usage.start()
-        let appWatch = ClaudeAppWatch(model: model)
-        appWatch.start()
         let keys = Hotkeys(model: model)
         keys.start()
         let news = SmallNews(model: model)
@@ -332,7 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.model.sharing = share
         }
         meeting.start()
-        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe, appWatch]
+        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe]
         snap.start()
         setupMenu()
         log("Lotse gestartet")
