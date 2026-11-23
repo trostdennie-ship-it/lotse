@@ -493,6 +493,8 @@ enum Demo {
         m.glass = .liquid
         let now = Date()
         if CommandLine.arguments.contains("--amber") { Theme.palette = .amber }
+        if let i = CommandLine.arguments.firstIndex(of: "--palette"), i + 1 < CommandLine.arguments.count,
+           let p = Palette(rawValue: CommandLine.arguments[i + 1]) { Theme.palette = p }
         m.hasNotch = notch; m.notchWidth = notch ? 185 : 0; m.topInset = notch ? 32 : 28
         func ev(_ id: String, _ title: String, _ from: Double, _ mins: Double, join: Bool = false) -> CalEvent {
             CalEvent(id: id, title: title, start: now.addingTimeInterval(from * 60), end: now.addingTimeInterval((from + mins) * 60),

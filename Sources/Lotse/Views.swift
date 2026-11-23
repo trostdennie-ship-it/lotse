@@ -13,7 +13,7 @@ enum Theme {
     static let faint = Color.white.opacity(0.60)
     /// Das gewählte Farbschema (Einstellungen → Aussehen). Alle Farbtöne unten richten sich danach.
     static var palette = Palette(rawValue: UserDefaults.standard.string(forKey: "palette") ?? "") ?? .ice
-    static var tones: Tones { palette == .amber ? .amber : .ice }
+    static var tones: Tones { palette.tones }
     static var accent: Color { tones.accent }                            // Punkt, Balken, Countdown
     static var ice: Color { tones.light }                                // helle Fläche gewählter Knöpfe
     static var warn: Color { tones.warn }                                // Warnung: fast volles Limit, riskanter Befehl
@@ -29,8 +29,23 @@ enum Theme {
 
 /// Farbschema: kühles Eisblau auf Schiefer oder warmer Bernstein auf Graphit.
 enum Palette: String, CaseIterable {
-    case ice, amber
-    var title: String { self == .ice ? "Eisblau auf Schiefer" : "Bernstein auf Graphit" }
+    case ice, amber, deep, lime
+    var title: String {
+        switch self {
+        case .ice: return "Eisblau auf Schiefer"
+        case .amber: return "Bernstein auf Graphit"
+        case .deep: return "Türkis auf Tiefsee"
+        case .lime: return "Limette auf Kohle"
+        }
+    }
+    var tones: Tones {
+        switch self {
+        case .ice: return .ice
+        case .amber: return .amber
+        case .deep: return .deep
+        case .lime: return .lime
+        }
+    }
 }
 
 /// Alle Farbtöne eines Schemas an einem Ort.
@@ -71,6 +86,28 @@ struct Tones {
         cover: [c(0.62, 0.43, 0.24), c(0.36, 0.24, 0.13)], dots: c(1.0, 0.94, 0.85),
         wave: [c(1.0, 0.72, 0.42), c(1.0, 0.88, 0.66), c(0.94, 0.55, 0.26), c(1.0, 0.72, 0.42)],
         chosen: [c(0.60, 0.43, 0.24), c(0.50, 0.35, 0.19)])
+
+    /// Die Farben des App-Symbols: Nachtblau bis Petrol, Türkis als Akzent, ein warmer Ton nur für Warnungen.
+    static let deep = Tones(
+        accent: c(0.40, 0.90, 0.84), light: c(0.76, 0.96, 0.93), onLight: c(0.03, 0.17, 0.22), warn: c(1.0, 0.70, 0.40),
+        tile: [c(0.20, 0.36, 0.50).opacity(0.62), c(0.12, 0.24, 0.37).opacity(0.58), c(0.08, 0.16, 0.27).opacity(0.60)],
+        button: [c(0.86, 0.99, 0.97), c(0.50, 0.90, 0.85)],
+        buttonRest: [c(0.34, 0.52, 0.66).opacity(0.55), c(0.22, 0.36, 0.50).opacity(0.50)],
+        surface: [c(0.012, 0.022, 0.05), c(0.04, 0.085, 0.14)], tint: c(0.035, 0.075, 0.13),
+        cover: [c(0.12, 0.50, 0.58), c(0.10, 0.22, 0.45)], dots: c(0.86, 0.98, 0.97),
+        wave: [c(0.40, 0.90, 0.84), c(0.42, 0.66, 1.0), c(0.62, 0.52, 1.0), c(0.40, 0.90, 0.84)],
+        chosen: [c(0.14, 0.44, 0.52), c(0.11, 0.34, 0.44)])
+
+    /// Fast schwarze, neutrale Flächen und ein einziger greller Akzent.
+    static let lime = Tones(
+        accent: c(0.78, 0.96, 0.36), light: c(0.88, 0.98, 0.62), onLight: c(0.09, 0.13, 0.02), warn: c(1.0, 0.55, 0.36),
+        tile: [c(0.34, 0.35, 0.33).opacity(0.62), c(0.23, 0.24, 0.225).opacity(0.58), c(0.155, 0.16, 0.15).opacity(0.60)],
+        button: [c(0.93, 1.0, 0.72), c(0.76, 0.94, 0.36)],
+        buttonRest: [c(0.52, 0.54, 0.50).opacity(0.55), c(0.36, 0.37, 0.345).opacity(0.50)],
+        surface: [c(0.02, 0.022, 0.02), c(0.075, 0.08, 0.072)], tint: c(0.07, 0.075, 0.068),
+        cover: [c(0.42, 0.56, 0.18), c(0.20, 0.28, 0.10)], dots: c(0.94, 1.0, 0.82),
+        wave: [c(0.78, 0.96, 0.36), c(0.94, 1.0, 0.70), c(0.36, 0.86, 0.56), c(0.78, 0.96, 0.36)],
+        chosen: [c(0.40, 0.52, 0.18), c(0.32, 0.42, 0.14)])
 }
 
 private struct GlassKey: EnvironmentKey { static let defaultValue = GlassStyle.solid }
@@ -375,18 +412,49 @@ struct Mascot: View {
     ]
 
     private static let boat = [
-        "......S.....",
-        "......SS....",
-        "......SSS...",
-        "...s..SSSS..",
-        "..ss..SSSSS.",
-        ".sss..SSSSS.",
-        "......M.....",
+        ".....MS.....",
+        ".....MSS....",
+        "....sMSS....",
+        "...ssMSSS...",
+        "..sssMSSSS..",
+        ".ssssMSSSSS.",
+        ".....M......",
         "HHHHHHHHHHHH",
         ".HHHHHHHHHH.",
-        "..hhhhhhhh..",
+        "...hhhhhh...",
     ]
     private static let waves = ["w.ww.ww.ww.w", ".ww.ww.ww.ww", "ww.ww.ww.ww."]
+
+    /// Große Boote (ab etwa 36 Punkt auf Retina) bekommen das Feinraster des App-Symbols: doppelt so viele Punkte je Richtung.
+    private static let fineBoat: [String] = {
+        var g = Array(repeating: Array(repeating: Character("."), count: 24), count: 20)
+        for r in 1...12 {                                             // Großsegel rechts vom Mast
+            let w = max(1, Int((Double(r) * 8 / 12).rounded()))
+            for c in 12..<(12 + w) { g[r + 2][c] = "S" }
+        }
+        for r in 5...12 { for c in (11 - min(6, r - 4))..<11 { g[r + 2][c] = "s" } }     // Vorsegel links
+        for r in 2...15 { g[r][11] = "M" }                                             // Mast
+        for (i, span) in [(2, 21), (3, 20), (4, 19), (6, 17)].enumerated() {           // Rumpf
+            for c in span.0...span.1 { g[16 + i][c] = i == 3 ? "h" : "H" }
+        }
+        return g.map { String($0) }
+    }()
+
+    private static let fineTower: [String] = {
+        var g = Array(repeating: Array(repeating: Character("."), count: 24), count: 20)
+        func fill(_ r: Int, _ a: Int, _ b: Int, _ ch: Character) { for c in a...b { g[r][c] = ch } }
+        fill(0, 11, 12, "H"); fill(1, 10, 13, "H")                    // Dach
+        fill(2, 10, 13, "L"); fill(3, 10, 13, "L")                    // Laterne
+        fill(4, 8, 15, "H"); fill(5, 9, 14, "h")                      // Galerie
+        for r in 6...17 {                                             // Schaft, nach unten breiter, quer gestreift
+            let half = r < 10 ? 2 : r < 14 ? 3 : 4
+            fill(r, 12 - half, 11 + half, ((r - 6) / 2) % 2 == 0 ? "S" : "s")
+        }
+        fill(18, 6, 17, "H"); fill(19, 5, 18, "h")                    // Sockel
+        return g.map { String($0) }
+    }()
+    /// Zum Ausprobieren: LOTSE_FINE=1 erzwingt das Feinraster auch für kleine Boote, =0 schaltet es ab.
+    private static let fineOverride: Bool? = ProcessInfo.processInfo.environment["LOTSE_FINE"].map { $0 == "1" }
 
     var body: some View {
         switch state {
@@ -435,40 +503,51 @@ struct Mascot: View {
 
     private func canvas(frame: Int, bright: Bool = false, shift: Int = 0) -> some View {
         Canvas { ctx, sz in
-            let art = state == .waiting ? Self.tower : Self.boat
-            let cols = CGFloat(Self.boat[0].count), rows = CGFloat(Self.boat.count + 2)
+            // Feinraster nur, wenn ein Punkt wenigstens drei Bildschirmpixel bekommt – sonst verschwimmt es.
+            let fine = Self.fineOverride ?? (min(sz.width, sz.height) * scale / 24 >= 3)
+            let k = fine ? 2 : 1
+            let art = fine ? (state == .waiting ? Self.fineTower : Self.fineBoat) : (state == .waiting ? Self.tower : Self.boat)
+            let cols = CGFloat(Self.boat[0].count * k), rows = CGFloat((Self.boat.count + 2) * k)
             // Kleine Boote dürfen halbe Schritte nehmen (1,5 Punkt je Kästchen): Die Kästchen rasten dann einzeln auf
             // ganze Punkte ein und bleiben auch auf einem Bildschirm ohne Retina scharf.
-            let px = min(sz.width / cols, sz.height / rows).rounded(.down)
+            let px = fine ? (min(sz.width / cols, sz.height / rows) * scale).rounded(.down) / scale
+                          : min(sz.width / cols, sz.height / rows).rounded(.down)
             // Zwischen den Kästchen bleibt ein schmaler Spalt – so sieht das Boot aus wie im App-Symbol.
             // Der Spalt ist ein Bildschirmpixel breit; bei ganz kleinen Booten ohne Retina wird er nur abgedunkelt,
             // sonst bliebe vom Kästchen zu wenig übrig.
             let hair = 1 / max(1, scale)
             let soft = px - hair < 1.4 && scale < 2
-            let gap = px < 2 ? 0 : (px >= 5 ? (px * 0.16 * scale).rounded() / scale : hair)
-            let ox = ((sz.width - px * cols) / 2).rounded()
-            let oy = ((sz.height - px * rows) / 2 + px).rounded()
+            let gap = fine ? hair : px < 2 ? 0 : (px >= 5 ? (px * 0.16 * scale).rounded() / scale : hair)
+            let snap = { (v: CGFloat) in fine ? (v * scale).rounded() / scale : v.rounded() }
+            let ox = snap((sz.width - px * cols) / 2)
+            let oy = snap((sz.height - px * rows) / 2 + px * CGFloat(k))
             var bob = 0
             if state == .sailing { bob = [0, -1, 0, 1][frame % 4] }
-            func dot(_ x: Int, _ y: Int, _ color: Color) {
-                let x0 = (ox + CGFloat(x) * px).rounded(), x1 = (ox + CGFloat(x + 1) * px).rounded()
-                let y0 = (oy + CGFloat(y) * px).rounded(), y1 = (oy + CGFloat(y + 1) * px).rounded()
+            /// Ein Punkt des gezeichneten Rasters (im Feinraster halb so groß).
+            func cell(_ x: Int, _ y: Int, _ color: Color) {
+                let x0 = snap(ox + CGFloat(x) * px), x1 = snap(ox + CGFloat(x + 1) * px)
+                let y0 = snap(oy + CGFloat(y) * px), y1 = snap(oy + CGFloat(y + 1) * px)
                 if soft, gap > 0 { ctx.fill(Path(CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)), with: .color(color.opacity(0.42))) }
                 ctx.fill(Path(CGRect(x: x0, y: y0, width: x1 - x0 - gap, height: y1 - y0 - gap)), with: .color(color))
             }
+            /// Ein Punkt im groben Zwölfer-Raster – im Feinraster ein Block aus vier Punkten.
+            func dot(_ x: Int, _ y: Int, _ color: Color) {
+                for dy in 0..<k { for dx in 0..<k { cell(x * k + dx, y * k + dy, color) } }
+            }
+            let move = shift * k
             let fade = state == .idle && !bright ? 0.82 : 1.0
             if shift != 99 {
                 for (y, row) in art.enumerated() {
                     if let p = printing, Double(y) >= p * Double(art.count) { continue }
                     for (x, c) in row.enumerated() {
-                        if !lit { if c != "." { dot(x, y, Color.white.opacity(0.35)) }; continue }
+                        if !lit { if c != "." { cell(x, y, Color.white.opacity(0.35)) }; continue }
                         switch c {
-                        case "L": dot(x + shift, y + bob, Color.white.opacity(frame % 2 == 0 || Theme.calm ? 1 : 0.55))
-                        case "S": dot(x + shift, y + bob, Color.white.opacity(0.96 * fade))
-                        case "s": dot(x + shift, y + bob, Color.white.opacity(0.70 * fade))
-                        case "M": dot(x + shift, y + bob, Color.white.opacity(0.80 * fade))
-                        case "H": dot(x + shift, y + bob, Theme.accent.opacity(fade))
-                        case "h": dot(x + shift, y + bob, Theme.accent.opacity(0.65 * fade))
+                        case "L": cell(x + move, y + bob, Color.white.opacity(frame % 2 == 0 || Theme.calm ? 1 : 0.55))
+                        case "S": cell(x + move, y + bob, Color.white.opacity(0.96 * fade))
+                        case "s": cell(x + move, y + bob, Color.white.opacity(0.70 * fade))
+                        case "M": cell(x + move, y + bob, Color.white.opacity(0.80 * fade))
+                        case "H": cell(x + move, y + bob, Theme.accent.opacity(fade))
+                        case "h": cell(x + move, y + bob, Theme.accent.opacity(0.65 * fade))
                         default: break
                         }
                     }
@@ -479,8 +558,9 @@ struct Mascot: View {
             // Der Lichtkegel des Leuchtturms: schwenkt abwechselnd nach rechts und links.
             if state == .waiting, lit, (printing ?? 1) >= 1, !Theme.calm {
                 let side = frame % 4
-                if side == 0 { dot(7, 0, .white.opacity(0.85)); dot(8, 0, .white.opacity(0.55)); dot(9, 0, .white.opacity(0.3)); dot(10, 0, .white.opacity(0.15)) }
-                if side == 2 { dot(4, 0, .white.opacity(0.85)); dot(3, 0, .white.opacity(0.55)); dot(2, 0, .white.opacity(0.3)); dot(1, 0, .white.opacity(0.15)) }
+                let by = fine ? 1 : 0     // im Feinraster sitzt die Laterne eine Zeile tiefer
+                if side == 0 { dot(7, by, .white.opacity(0.85)); dot(8, by, .white.opacity(0.55)); dot(9, by, .white.opacity(0.3)); dot(10, by, .white.opacity(0.15)) }
+                if side == 2 { dot(4, by, .white.opacity(0.85)); dot(3, by, .white.opacity(0.55)); dot(2, by, .white.opacity(0.3)); dot(1, by, .white.opacity(0.15)) }
             }
             // Wetter: Ab 90 % des Limits zieht eine Gewitterwolke auf, gelegentlich blitzt es.
             if sea >= 2, lit, (printing ?? 1) >= 1, shift == 0 {
@@ -491,14 +571,24 @@ struct Mascot: View {
             }
             let moving = state == .sailing || shift != 0
             let wave = Self.waves[moving ? frame % 3 : 0]
-            for (x, c) in wave.enumerated() where c == "w" && lit && (printing ?? 1) >= 1 {
-                dot(x, Self.boat.count, Color.white.opacity(state == .idle && !bright ? 0.22 : 0.42))
+            let sea0 = Color.white.opacity(state == .idle && !bright ? 0.22 : 0.42)
+            if fine, lit, (printing ?? 1) >= 1 {
+                // Wie im App-Symbol: zwei versetzte Reihen, die zusammen eine Wellenlinie ergeben.
+                let w = Array(wave)
+                for x in 0..<24 { cell(x, Self.boat.count * 2 + (w[x % 12] == "w" ? 1 : 0), sea0) }
+            } else {
+                for (x, c) in wave.enumerated() where c == "w" && lit && (printing ?? 1) >= 1 { dot(x, Self.boat.count, sea0) }
             }
             // Höherer Seegang ab 70 % des Limits: eine zweite, versetzte Wellenreihe schlägt am Rumpf hoch.
             if sea >= 1, lit, (printing ?? 1) >= 1, state != .waiting {
                 let crest = Self.waves[(moving ? frame + 1 : 1) % 3]
-                for (x, c) in crest.enumerated() where c == "w" && (x + frame) % 3 == 0 {
-                    dot(x, Self.boat.count + 1, Color.white.opacity(0.5))
+                if fine {
+                    let w = Array(crest)
+                    for x in 0..<24 where w[x % 12] == "w" && (x + frame) % 3 == 0 { cell(x, Self.boat.count * 2 - 1, Color.white.opacity(0.5)) }
+                } else {
+                    for (x, c) in crest.enumerated() where c == "w" && (x + frame) % 3 == 0 {
+                        dot(x, Self.boat.count + 1, Color.white.opacity(0.5))
+                    }
                 }
             }
         }
