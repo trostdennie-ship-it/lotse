@@ -98,7 +98,8 @@ final class IslandController {
 
     /// Die Insel sitzt auf dem Bildschirm mit der Menüleiste: am Notch, sonst als Pille oben mittig.
     func reposition() {
-        guard let s = NSScreen.screens.first else { return }
+        // Für die Film-Aufnahme: der Bildschirm mit Notch, auch wenn ein anderer der Hauptbildschirm ist.
+        guard let s = (FilmState.active ? NSScreen.screens.first { $0.safeAreaInsets.top > 0 } : nil) ?? NSScreen.screens.first else { return }
         let notchH = s.safeAreaInsets.top
         let menuH = s.frame.maxY - s.visibleFrame.maxY
         model.hasNotch = notchH > 0
@@ -138,6 +139,7 @@ final class IslandController {
     }
 
     private func checkMouse() {
+        if FilmState.active { return }       // während der Aufnahme steuert das Drehbuch, nicht die Maus
         let p = NSEvent.mouseLocation
         let f = panel.frame
         let visible = panel.isOnActiveSpace      // in Vollbild-Spaces ist die Insel nicht zu sehen
@@ -230,6 +232,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if args.contains("--disconnect-claude") {
             do { try ClaudeHooks.remove(); print("Lotses Hooks sind aus ~/.claude/settings.json entfernt"); exit(0) }
             catch { print("FEHLER: \(error.localizedDescription)"); exit(1) }
+        }
+        // Film-Aufnahme: spielt eine Vorführung am Notch ab und schneidet dabei nur das eigene Insel-Fenster mit.
+        if let i = args.firstIndex(of: "--film"), args.count > i + 1 {
+            FilmState.active = true
+            let (m, _) = Demo.build(mode: "week", notch: true)
+            let fleet = Demo.build(mode: "multi", notch: true).0.sessions
+            m.mode = .compact; m.tab = .home; m.showWeek = false; m.sessions = []; m.notices = []; m.unread = 0
+            m.palette = .amber; Theme.palette = .amber; m.glass = .frosted
+            model = m
+            controller = IslandController(model: m)
+            if #available(macOS 15.0, *) {
+                let film = Film(model: m, panel: controller!.panel, dir: URL(fileURLWithPath: args[i + 1]), fleet: fleet)
+                sources = [film]
+                film.start()
+            }
+            return
         }
         if let i = args.firstIndex(of: "--snapshot-setup"), args.count > i + 2 {
             Demo.snapshotSetup(to: args[i + 1], step: Int(args[i + 2]) ?? 0)
@@ -441,6 +459,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
 enum Demo {
     @MainActor static func snapshot(to path: String, mode: String, notch: Bool) {
+        let (m, tall) = build(mode: mode, notch: notch)
+        render(m, tall: tall, to: path)
+    }
+
+    /// Ein Modell mit Beispieldaten für den genannten Zustand (Probebilder, Vorführung).
+    @MainActor static func build(mode: String, notch: Bool) -> (IslandModel, Bool) {
         let m = IslandModel(persist: false)
         StagedMascot.instant = true
         m.glass = .liquid
@@ -598,6 +622,10 @@ enum Demo {
         default: m.mode = .expanded; tall = true
         }
 
+        return (m, tall)
+    }
+
+    @MainActor private static func render(_ m: IslandModel, tall: Bool, to path: String) {
         // Für Filmmaterial: LOTSE_W / LOTSE_H (Breite und Höhe in Punkt), LOTSE_SCALE (Auflösung), LOTSE_BG=dark|flat|key (Hintergrund).
         let env = ProcessInfo.processInfo.environment
         let height = env["LOTSE_H"].flatMap { Double($0) }.map { CGFloat($0) } ?? (tall ? 560 : 280)

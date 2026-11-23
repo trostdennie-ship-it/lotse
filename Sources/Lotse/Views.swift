@@ -1101,7 +1101,7 @@ struct PeekView: View {
         HStack(spacing: 8) {
             Button("Später") { model.dismissPeek() }.buttonStyle(CapsuleStyle(compact: true))
             if notice.kind != .info {
-                Button(notice.kind == .calendar && notice.url != nil ? "Beitreten" : "Öffnen") {
+                Button(notice.kind == .calendar ? (notice.url != nil ? "Beitreten" : "OK") : "Öffnen") {
                     model.open(notice); model.dismissPeek()
                 }
                 .buttonStyle(CapsuleStyle(primary: true, compact: true))
@@ -2306,7 +2306,8 @@ struct NotificationsTile: View {
                     let items = Array(model.notices.prefix(all ? 8 : 3))
                     ForEach(Array(items.enumerated()), id: \.element.id) { i, n in
                         if i > 0 { Rectangle().fill(Theme.line).frame(height: 1).padding(.leading, 34).padding(.vertical, 7) }
-                        Button { model.open(n) } label: {
+                        // Die Zeile selbst tut nichts – rechts stehen zwei kleine Knöpfe: öffnen oder abhaken.
+                        HStack(spacing: 6) {
                             HStack(spacing: 10) {
                                 if n.card == "mail" {
                                     Image(systemName: "envelope.fill").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.accent)
@@ -2328,9 +2329,19 @@ struct NotificationsTile: View {
                                     }
                                 }
                             }
-                            .contentShape(Rectangle())
+                            Button { model.open(n) } label: {
+                                Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.soft)
+                                    .frame(width: 28, height: 26).background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.raised))
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain).modifier(HoverGlow()).help("In \(n.appName) öffnen").accessibilityLabel("Öffnen")
+                            Button { withAnimation(IslandModel.spring) { model.notices.removeAll { $0.id == n.id } } } label: {
+                                Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.soft)
+                                    .frame(width: 28, height: 26).background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.raised))
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain).modifier(HoverGlow()).help("Abhaken").accessibilityLabel("Abhaken")
                         }
-                        .buttonStyle(.plain)
                     }
                     if model.notices.count > 3 {
                         Button {

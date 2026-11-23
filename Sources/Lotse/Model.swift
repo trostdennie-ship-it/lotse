@@ -627,6 +627,8 @@ final class IslandModel: ObservableObject {
     func open(_ notice: Notice) {
         if let sid = notice.sessionID, let s = sessions.first(where: { $0.id == sid }) { openSession?(s) }
         else if let url = notice.url { log("Öffne \(url.scheme ?? "")://\(url.host ?? "")\(url.path.prefix(24))…"); NSWorkspace.shared.open(url) }
+        // Eine Termin-Erinnerung ohne Beitritts-Link wird nur weggeklickt – die Kalender-App bleibt zu.
+        else if notice.kind == .calendar {}
         else if let id = notice.appID { log("Öffne App \(id) (Mitteilung ohne Ziel)"); Apps.activate(id) }
         notices.removeAll { $0.id == notice.id }
     }
