@@ -28,6 +28,9 @@ final class IslandPanel: NSPanel {
     /// Das ist eine interne AppKit-Abfrage: Fällt sie in einem späteren macOS weg, wird das Glas wieder matt.
     @objc(_hasActiveAppearance) func lotseHasActiveAppearance() -> Bool { true }
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+    /// Film-Aufnahme: Das Fenster gibt sich als Retina aus. So zeichnet SwiftUI Schrift und Boot in doppelter Auflösung,
+    /// und zusammen mit der doppelten Größe landet jedes dieser Pixel genau auf einem Bildschirmpixel.
+    override var backingScaleFactor: CGFloat { FilmState.active ? 2 : super.backingScaleFactor }
 }
 
 final class HostView: NSHostingView<IslandView> {
@@ -65,11 +68,23 @@ final class IslandController {
 
     init(model: IslandModel) {
         self.model = model
+        if FilmState.active {
+            // Film-Aufnahme: Die Insel wird vergrößert gezeichnet (Standard 2×), damit die Aufnahme auch auf einem
+            // Bildschirm ohne Retina scharf genug für Nahaufnahmen ist.
+            let k = FilmState.scale
+            let film = NSHostingView(rootView: IslandView(model: model)
+                .frame(width: Self.size.width, height: Self.size.height, alignment: .top)
+                .scaleEffect(k, anchor: .top)
+                .frame(width: Self.size.width * k, height: Self.size.height * k, alignment: .top))
+            film.sizingOptions = []
+            panel.contentView = film
+        } else {
         let host = HostView(rootView: IslandView(model: model))
         host.model = model
         host.sizingOptions = []
         host.registerForDraggedTypes([.fileURL])
         panel.contentView = host
+        }
         model.releaseKeyboard = { [weak self] in self?.releaseKeyboard() }
         reposition()
         NotificationCenter.default.addObserver(
@@ -109,6 +124,14 @@ final class IslandController {
         } else {
             model.notchWidth = 0
             model.topInset = min(max(menuH, 26), 34)
+        }
+        if FilmState.active {
+            // Im Film sitzt die Insel immer an einem Notch – auch wenn dieser Bildschirm keinen hat.
+            model.hasNotch = true; model.notchWidth = 185; model.topInset = 32
+            let k = FilmState.scale, w = Self.size.width * k, fh = Self.size.height * k
+            panel.setFrame(NSRect(x: s.frame.midX - w / 2, y: s.frame.maxY - fh, width: w, height: fh), display: true)
+            panel.orderFrontRegardless()
+            return
         }
         let h = min(Self.size.height, s.frame.height)      // nie höher als der Bildschirm
         panel.setFrame(NSRect(x: s.frame.midX - Self.size.width / 2, y: s.frame.maxY - h,
@@ -239,7 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let (m, _) = Demo.build(mode: "week", notch: true)
             let fleet = Demo.build(mode: "multi", notch: true).0.sessions
             m.mode = .compact; m.tab = .home; m.showWeek = false; m.sessions = []; m.notices = []; m.unread = 0
-            m.palette = .amber; Theme.palette = .amber; m.glass = .frosted
+            m.palette = .amber; Theme.palette = .amber; m.glass = .liquid
             model = m
             controller = IslandController(model: m)
             if #available(macOS 15.0, *) {
@@ -270,6 +293,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         model.openSetup = { [weak self] in self?.onboarding.show() }
         let usage = UsageSource(model: model)
         cal.start(); claude.start(); notes.start(); music.start(); usage.start()
+        let appWatch = ClaudeAppWatch(model: model)
+        appWatch.start()
         let keys = Hotkeys(model: model)
         keys.start()
         let news = SmallNews(model: model)
@@ -307,7 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.model.sharing = share
         }
         meeting.start()
-        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe]
+        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe, appWatch]
         snap.start()
         setupMenu()
         log("Lotse gestartet")

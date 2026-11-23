@@ -3,7 +3,13 @@ import SwiftUI
 import ScreenCaptureKit
 import AVFoundation
 
-enum FilmState { nonisolated(unsafe) static var active = false }
+enum FilmState {
+    nonisolated(unsafe) static var active = false
+    /// Vergrößerung der Insel während der Aufnahme (`LOTSE_FILM_SCALE`, Standard 2).
+    static let scale: CGFloat = ProcessInfo.processInfo.environment["LOTSE_FILM_SCALE"].flatMap { Double($0) }.map { CGFloat($0) } ?? 2
+    /// Nur die ersten Sekunden aufnehmen (`LOTSE_FILM_SECONDS`) – für eine schnelle Probe.
+    static let seconds: Double? = ProcessInfo.processInfo.environment["LOTSE_FILM_SECONDS"].flatMap { Double($0) }
+}
 
 /// Film-Aufnahme (`Lotse --film <ordner>`): Die echte Insel spielt am Notch eine Vorführung mit Beispieldaten ab,
 /// und Lotse schneidet dabei nur das eigene Insel-Fenster mit – mit durchsichtigem Hintergrund, ohne Mauszeiger.
@@ -97,6 +103,7 @@ final class Film: NSObject, SCStreamOutput, SCStreamDelegate {
         let working = fleet.filter { $0.status == .working }
         func fresh(_ s: ClaudeSession, ago: Double) -> ClaudeSession { var c = s; c.startedAt = Date().addingTimeInterval(-ago); c.updated = Date(); return c }
 
+        if let cut = FilmState.seconds { DispatchQueue.main.asyncAfter(deadline: .now() + cut) { [weak self] in self?.finish() } }
         step("ruhe", after: 2.2) {}
         step("arbeitet", after: 3.2) { withAnimation(spring) { m.sessions = [fresh(working[0], ago: 247)] } }
         step("mehrere", after: 2.6) { withAnimation(spring) { m.sessions = [fresh(working[0], ago: 250), fresh(working[1], ago: 912), fresh(working[2], ago: 64)] } }
