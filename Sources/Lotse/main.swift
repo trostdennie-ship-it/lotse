@@ -353,8 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Das Pixel-Segelboot für die Menüleiste – dasselbe Boot wie in der Insel, einfarbig, damit macOS es
     /// je nach heller oder dunkler Menüleiste selbst einfärbt.
     private static func menuBoat() -> NSImage {
-        let art = ["......S.....", "......SS....", "......SSS...", "...s..SSSS..", "..ss..SSSSS.", ".sss..SSSSS.",
-                   "......M.....", "HHHHHHHHHHHH", ".HHHHHHHHHH.", "..hhhhhhhh.."]
+        let art = Mascot.boat
         let px: CGFloat = 2, w = 24.0, h = 20.0
         let hair = 1 / (NSScreen.main?.backingScaleFactor ?? 2)
         let img = NSImage(size: NSSize(width: w, height: h), flipped: true) { _ in

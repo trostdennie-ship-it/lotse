@@ -411,7 +411,8 @@ struct Mascot: View {
         "..hhhhhhhh..",
     ]
 
-    private static let boat = [
+    /// Auch die Menüleiste zeichnet dieses Muster – so bleiben beide Boote gleich.
+    static let boat = [
         ".....MS.....",
         ".....MSS....",
         "....sMSS....",
@@ -453,6 +454,8 @@ struct Mascot: View {
         fill(18, 6, 17, "H"); fill(19, 5, 18, "h")                    // Sockel
         return g.map { String($0) }
     }()
+    /// Bilder pro Sekunde für Segeln und Leuchtturm (`defaults write local.lotse.app boatFPS 20`).
+    private static let fps: Double = { let v = UserDefaults.standard.double(forKey: "boatFPS"); return v >= 2 ? min(v, 60) : 30 }()
     /// Zum Ausprobieren: LOTSE_FINE=1 erzwingt das Feinraster auch für kleine Boote, =0 schaltet es ab.
     private static let fineOverride: Bool? = ProcessInfo.processInfo.environment["LOTSE_FINE"].map { $0 == "1" }
 
@@ -463,13 +466,14 @@ struct Mascot: View {
         case .arriving(let since):
             // Einmalige Sequenz (gut 1,6 s): hinausfahren, kurz weg sein, wieder anlegen.
             if let t = Probe.time {
-                canvas(frame: Int(t / 0.1), bright: true, shift: Self.voyage(t))
+                canvas(frame: 0, bright: true, shift: Self.glide(t) == nil ? 99 : 0, time: t, slide: Self.glide(t))
             } else if Theme.calm || settled || Date().timeIntervalSince(since) > 1.7 {
                 canvas(frame: 0, bright: true)
             } else {
                 TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
-                    canvas(frame: Int(ctx.date.timeIntervalSinceReferenceDate / 0.1), bright: true,
-                           shift: Self.voyage(ctx.date.timeIntervalSince(since)))
+                    let t = ctx.date.timeIntervalSince(since)
+                    canvas(frame: 0, bright: true, shift: Self.glide(t) == nil ? 99 : 0,
+                           time: ctx.date.timeIntervalSinceReferenceDate, slide: Self.glide(t))
                 }
                 .task(id: since) {
                     try? await Task.sleep(nanoseconds: UInt64(max(0, 1.75 - Date().timeIntervalSince(since)) * 1_000_000_000))
@@ -479,13 +483,16 @@ struct Mascot: View {
         case .sailing, .waiting:
             if let f = Probe.frame {
                 canvas(frame: f)
+            } else if let t = Probe.time {
+                canvas(frame: Int(t / (state == .sailing ? 0.28 : 0.5)), time: t)
             } else if Theme.calm {
                 canvas(frame: 0)
             } else {
-                // Bewusst in Schritten statt fließend – so bewegt sich Pixelgrafik.
+                // Fließend: Das Boot wiegt sich, die Wellen laufen durch, der Lichtkegel blendet über.
                 let step = state == .sailing ? 0.28 : 0.5
-                TimelineView(.periodic(from: .now, by: step)) { ctx in
-                    canvas(frame: Int(ctx.date.timeIntervalSinceReferenceDate / step))
+                TimelineView(.animation(minimumInterval: 1.0 / Self.fps)) { ctx in
+                    let t = ctx.date.timeIntervalSinceReferenceDate
+                    canvas(frame: Int(t / step), time: t)
                 }
             }
         }
@@ -501,7 +508,17 @@ struct Mascot: View {
         return 0
     }
 
-    private func canvas(frame: Int, bright: Bool = false, shift: Int = 0) -> some View {
+    /// Dasselbe wie `voyage`, aber stufenlos und in Rasterschritten mit Nachkommastellen; nil = gerade außer Sicht.
+    private static func glide(_ t: Double) -> Double? {
+        let span = 14.0
+        if t < 0.73 { let k = t / 0.73; return span * k * k }
+        if t < 1.36 { return nil }
+        if t < 1.61 { let k = (t - 1.36) / 0.25; return -span * (1 - k) * (1 - k) }
+        return 0
+    }
+
+    /// `time` (Sekunden) schaltet auf fließende Bewegung; ohne sie springt alles in ganzen Rasterschritten (Probebilder).
+    private func canvas(frame: Int, bright: Bool = false, shift: Int = 0, time: Double? = nil, slide: Double? = nil) -> some View {
         Canvas { ctx, sz in
             // Feinraster nur, wenn ein Punkt wenigstens drei Bildschirmpixel bekommt – sonst verschwimmt es.
             let fine = Self.fineOverride ?? (min(sz.width, sz.height) * scale / 24 >= 3)
@@ -524,9 +541,10 @@ struct Mascot: View {
             var bob = 0
             if state == .sailing { bob = [0, -1, 0, 1][frame % 4] }
             /// Ein Punkt des gezeichneten Rasters (im Feinraster halb so groß).
-            func cell(_ x: Int, _ y: Int, _ color: Color) {
-                let x0 = snap(ox + CGFloat(x) * px), x1 = snap(ox + CGFloat(x + 1) * px)
-                let y0 = snap(oy + CGFloat(y) * px), y1 = snap(oy + CGFloat(y + 1) * px)
+            /// `dx`/`dy` verschieben den Punkt stufenlos (in Punkt) – das Raster selbst bleibt eingerastet.
+            func cell(_ x: Int, _ y: Int, _ color: Color, dx: CGFloat = 0, dy: CGFloat = 0) {
+                let x0 = snap(ox + CGFloat(x) * px) + dx, x1 = snap(ox + CGFloat(x + 1) * px) + dx
+                let y0 = snap(oy + CGFloat(y) * px) + dy, y1 = snap(oy + CGFloat(y + 1) * px) + dy
                 if soft, gap > 0 { ctx.fill(Path(CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)), with: .color(color.opacity(0.42))) }
                 ctx.fill(Path(CGRect(x: x0, y: y0, width: x1 - x0 - gap, height: y1 - y0 - gap)), with: .color(color))
             }
@@ -534,7 +552,11 @@ struct Mascot: View {
             func dot(_ x: Int, _ y: Int, _ color: Color) {
                 for dy in 0..<k { for dx in 0..<k { cell(x * k + dx, y * k + dy, color) } }
             }
-            let move = shift * k
+            let unit = px * CGFloat(k)                                    // ein Schritt im Zwölfer-Raster
+            let moveX = CGFloat(slide ?? Double(shift)) * unit
+            // Wiegen: fließend eine knappe halbe Rasterhöhe auf und ab, sonst ganze Schritte.
+            let bobY: CGFloat = state != .sailing ? 0
+                : time.map { CGFloat(sin($0 * 2 * .pi / 1.12)) * unit * 0.45 } ?? CGFloat(bob) * px
             let fade = state == .idle && !bright ? 0.82 : 1.0
             if shift != 99 {
                 for (y, row) in art.enumerated() {
@@ -542,25 +564,35 @@ struct Mascot: View {
                     for (x, c) in row.enumerated() {
                         if !lit { if c != "." { cell(x, y, Color.white.opacity(0.35)) }; continue }
                         switch c {
-                        case "L": cell(x + move, y + bob, Color.white.opacity(frame % 2 == 0 || Theme.calm ? 1 : 0.55))
-                        case "S": cell(x + move, y + bob, Color.white.opacity(0.96 * fade))
-                        case "s": cell(x + move, y + bob, Color.white.opacity(0.70 * fade))
-                        case "M": cell(x + move, y + bob, Color.white.opacity(0.80 * fade))
-                        case "H": cell(x + move, y + bob, Theme.accent.opacity(fade))
-                        case "h": cell(x + move, y + bob, Theme.accent.opacity(0.65 * fade))
+                        case "L": cell(x, y, Color.white.opacity(Theme.calm ? 1 : time.map { 0.78 + 0.22 * cos($0 * 2 * .pi) } ?? (frame % 2 == 0 ? 1 : 0.55)), dx: moveX, dy: bobY)
+                        case "S": cell(x, y, Color.white.opacity(0.96 * fade), dx: moveX, dy: bobY)
+                        case "s": cell(x, y, Color.white.opacity(0.70 * fade), dx: moveX, dy: bobY)
+                        case "M": cell(x, y, Color.white.opacity(0.80 * fade), dx: moveX, dy: bobY)
+                        case "H": cell(x, y, Theme.accent.opacity(fade), dx: moveX, dy: bobY)
+                        case "h": cell(x, y, Theme.accent.opacity(0.65 * fade), dx: moveX, dy: bobY)
                         default: break
                         }
                     }
                 }
                 // Kielwasser hinter dem Rumpf, solange das Boot Fahrt macht.
-                if shift > 0 { for i in 1...min(4, shift) { dot(shift - i, 9, Color.white.opacity(0.45 - 0.09 * Double(i))) } }
+                let out = slide ?? Double(shift)
+                if out > 0.5 {
+                    for i in 1...min(4, Int(out.rounded(.up))) {
+                        for d in 0..<(k * k) { cell(-i * k + d % k, 9 * k + d / k, Color.white.opacity(0.45 - 0.09 * Double(i)), dx: moveX) }
+                    }
+                }
             }
             // Der Lichtkegel des Leuchtturms: schwenkt abwechselnd nach rechts und links.
             if state == .waiting, lit, (printing ?? 1) >= 1, !Theme.calm {
                 let side = frame % 4
                 let by = fine ? 1 : 0     // im Feinraster sitzt die Laterne eine Zeile tiefer
-                if side == 0 { dot(7, by, .white.opacity(0.85)); dot(8, by, .white.opacity(0.55)); dot(9, by, .white.opacity(0.3)); dot(10, by, .white.opacity(0.15)) }
-                if side == 2 { dot(4, by, .white.opacity(0.85)); dot(3, by, .white.opacity(0.55)); dot(2, by, .white.opacity(0.3)); dot(1, by, .white.opacity(0.15)) }
+                // Fließend blendet der Kegel im Zwei-Sekunden-Takt von rechts nach links über.
+                let swing = time.map { cos($0 * .pi) }
+                let right = swing.map { max(0, $0) } ?? (side == 0 ? 1 : 0), left = swing.map { max(0, -$0) } ?? (side == 2 ? 1 : 0)
+                for (i, a) in [0.85, 0.55, 0.3, 0.15].enumerated() {
+                    if right > 0.02 { dot(7 + i, by, .white.opacity(a * right)) }
+                    if left > 0.02 { dot(4 - i, by, .white.opacity(a * left)) }
+                }
             }
             // Wetter: Ab 90 % des Limits zieht eine Gewitterwolke auf, gelegentlich blitzt es.
             if sea >= 2, lit, (printing ?? 1) >= 1, shift == 0 {
@@ -572,7 +604,23 @@ struct Mascot: View {
             let moving = state == .sailing || shift != 0
             let wave = Self.waves[moving ? frame % 3 : 0]
             let sea0 = Color.white.opacity(state == .idle && !bright ? 0.22 : 0.42)
-            if fine, lit, (printing ?? 1) >= 1 {
+            if let time, moving, lit, (printing ?? 1) >= 1 {
+                // Die Wellen wandern stufenlos nach links (ein Rasterschritt je 0,28 s); an den Rändern blenden sie aus.
+                let n = 12 * k, base = Array(Self.waves[0])
+                let phase = (time / (0.28 / Double(k))).truncatingRemainder(dividingBy: 3)
+                let whole = Int(phase), frac = CGFloat(phase - Double(whole))
+                for x in 0...n {
+                    let src = (x + whole) % 12
+                    let pos = CGFloat(x) - frac
+                    let edge = min(1, max(0, min(pos + 1, CGFloat(n) - pos)))
+                    guard edge > 0 else { continue }
+                    if fine {
+                        cell(x, Self.boat.count * 2 + (base[src] == "w" ? 1 : 0), sea0.opacity(Double(edge)), dx: -frac * px)
+                    } else if base[src] == "w" {
+                        cell(x, Self.boat.count, sea0.opacity(Double(edge)), dx: -frac * px)
+                    }
+                }
+            } else if fine, lit, (printing ?? 1) >= 1 {
                 // Wie im App-Symbol: zwei versetzte Reihen, die zusammen eine Wellenlinie ergeben.
                 let w = Array(wave)
                 for x in 0..<24 { cell(x, Self.boat.count * 2 + (w[x % 12] == "w" ? 1 : 0), sea0) }
