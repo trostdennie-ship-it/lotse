@@ -20,6 +20,10 @@ struct Notice: Identifiable {
     var card: String? = nil        // gestaltete Geräte-Karte, z. B. "headphones"
     /// Nummer des Eintrags in der Mitteilungszentrale – verschwindet er dort (gelesen, weggeklickt), geht er auch hier.
     var recordID: Int64? = nil
+    /// Wie lange der Hinweis stehen bleibt (Sekunden); nil = übliche Dauer. Termin-Erinnerungen bleiben länger.
+    var hold: TimeInterval? = nil
+    /// Leiser Ton beim Erscheinen (Termin beginnt gleich).
+    var sound = false
     /// Kleine Meldung ohne Knöpfe (Pille oder Geräte-Karte).
     var small: Bool { brief || card != nil }
 }
@@ -185,7 +189,15 @@ struct Track {
 }
 
 final class IslandModel: ObservableObject {
-    @Published var mode: IslandMode = .compact
+    @Published var mode: IslandMode = .compact {
+        didSet {
+            // Nach dem Zuklappen eine wartende Termin-Erinnerung nachreichen (höchstens drei Minuten alt).
+            guard mode == .compact, oldValue == .expanded, let w = waitingPeek else { return }
+            waitingPeek = nil
+            guard Date().timeIntervalSince(w.since) < 180 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.post(w.notice) }
+        }
+    }
     @Published var tab: Tab = .home
     @Published var glass: GlassStyle = GlassStyle(rawValue: UserDefaults.standard.string(forKey: "glass") ?? "") ?? .liquid {
         didSet { if glass != .preview { UserDefaults.standard.set(glass.rawValue, forKey: "glass") } }
@@ -455,7 +467,11 @@ final class IslandModel: ObservableObject {
         }
         // Freigaben und kurze Bestätigungen kommen immer durch; alles andere schweigt, solange der Bildschirm geteilt wird.
         // Nur Lotses eigene kleine Meldungen (Laden, Kopfhörer) kommen immer durch – eine Mail-Karte nicht.
-        let urgent = (notice.small && notice.kind == .info) || (notice.sessionID != nil && asks.contains { $0.sessionID == notice.sessionID })
+        // „Termin beginnt gleich" kommt auch beim Bildschirmteilen durch – dann ohne Titel.
+        let meetingNow = notice.kind == .calendar && notice.sound
+        let urgent = meetingNow || (notice.small && notice.kind == .info) || (notice.sessionID != nil && asks.contains { $0.sessionID == notice.sessionID })
+        if notice.kind == .calendar { log("Termin-Erinnerung: \(discreet ? "(Titel verborgen)" : notice.title) – \(notice.body)\(silent && !urgent ? " · stumm (Bildschirm wird geteilt)" : mode == .expanded ? " · Insel offen, folgt beim Zuklappen" : "")") }
+        if notice.sound, UserDefaults.standard.object(forKey: "calendarSound") as? Bool ?? true, !inCall { NSSound(named: "Tink")?.play() }
         if silent, !urgent {
             if notice.kind != .system, mode != .expanded { unread += 1 }
             return
@@ -464,6 +480,8 @@ final class IslandModel: ObservableObject {
         if urgent, !notice.small, mode == .expanded, tab != .home { withAnimation(Self.spring) { tab = .home } }
         // Eine offene Freigabe im Kurz-Hinweis wird von anderen Hinweisen nicht verdrängt.
         if mode == .peek, peekAsk != nil, !urgent { return }
+        // Ist die Insel gerade offen, geht eine Termin-Erinnerung nicht verloren: Sie erscheint, sobald die Insel zuklappt.
+        if peek, mode == .expanded, notice.kind == .calendar { waitingPeek = (notice, Date()); return }
         guard peek, mode == .compact || mode == .peek else { return }
         peekWork?.cancel()
         var shown = notice
@@ -475,7 +493,8 @@ final class IslandModel: ObservableObject {
             case .claude: shown.appName = "Claude"
             case .info: break
             }
-            shown.body = ""
+            // Wann ein Termin beginnt, verrät nichts – nur der Titel bleibt verborgen.
+            if notice.kind != .calendar { shown.body = "" }
         }
         if mode == .peek {
             // Ein neuer Hinweis ersetzt den alten nicht an Ort und Stelle: Die Insel zieht sich kurz zusammen
@@ -502,8 +521,11 @@ final class IslandModel: ObservableObject {
             withAnimation(Self.spring) { self.mode = .compact }
         }
         peekWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (shown.card == "mail" ? 5 : shown.card != nil ? 3.6 : shown.brief ? 2.2 : 6), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (shown.hold ?? (shown.card == "mail" ? 5 : shown.card != nil ? 3.6 : shown.brief ? 2.2 : 6)), execute: work)
     }
+
+    /// Termin-Erinnerung, die auf das Zuklappen der Insel wartet.
+    private var waitingPeek: (notice: Notice, since: Date)?
 
     /// Die Freigabe, die zum gerade gezeigten Hinweis gehört.
     var peekAsk: PermissionAsk? {

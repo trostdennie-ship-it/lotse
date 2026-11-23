@@ -1700,12 +1700,23 @@ struct WeekRow: View {
             }
             ForEach(list.prefix(6)) { e in
                 let past = e.end < model.now
+                // Läuft gerade: hervorgehoben mit Endzeit. Vorbei: ausgegraut. Ganztägiges bleibt neutral.
+                let running = !e.allDay && e.start <= model.now && e.end > model.now
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(e.allDay ? "ganztägig" : Fmt.time.string(from: e.start))
-                        .font(Theme.font(10)).monospacedDigit().foregroundStyle(past ? Theme.faint : Theme.accent)
-                    e.marked(discreet: model.discreet).font(Theme.font(11, .medium)).foregroundStyle(past ? Theme.faint : Theme.text)
+                    Text(e.allDay ? "ganztägig" : running ? "jetzt · bis \(Fmt.time.string(from: e.end))" : Fmt.time.string(from: e.start))
+                        .font(Theme.font(10, running ? .semibold : .regular)).monospacedDigit()
+                        .foregroundStyle(past ? Theme.faint : Theme.accent).lineLimit(1)
+                    e.marked(discreet: model.discreet).font(Theme.font(11, running ? .semibold : .medium))
+                        .foregroundStyle(past ? Theme.faint : Theme.text)
                         .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, running ? 6 : 0).padding(.vertical, running ? 4 : 0)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.accent.opacity(running ? 0.18 : 0)))
+                .overlay(alignment: .leading) {
+                    if running { RoundedRectangle(cornerRadius: 1).fill(Theme.accent).frame(width: 2).padding(.vertical, 4) }
+                }
+                .opacity(past ? 0.45 : 1)
                 .accessibilityElement(children: .combine)
                 .help("\(e.label(discreet: model.discreet))\(e.role == .none ? "" : " (" + e.role.title + ")") · \(e.allDay ? "ganztägig" : Fmt.time.string(from: e.start) + " – " + Fmt.time.string(from: e.end))")
             }

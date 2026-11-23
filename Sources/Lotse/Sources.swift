@@ -142,12 +142,13 @@ final class CalendarSource {
                 alerted.insert(key10)
                 model.post(Notice(kind: .calendar, appID: "com.apple.iCal", appName: e.role == .none ? "Kalender" : "Kalender · \(e.role.title)",
                                   title: e.title, body: "Beginnt \(Fmt.until(e.start, now: now)) · \(Fmt.time.string(from: e.start))",
-                                  url: e.joinURL))
+                                  url: e.joinURL, hold: 12))
             } else if secs <= 90, secs > -120, !alerted.contains(key0) {
                 alerted.insert(key0); alerted.insert(key10)
                 model.post(Notice(kind: .calendar, appID: "com.apple.iCal", appName: e.role == .none ? "Kalender" : "Kalender · \(e.role.title)",
-                                  title: e.title, body: e.joinURL == nil ? "Beginnt jetzt" : "Beginnt jetzt · klicken zum Beitreten",
-                                  url: e.joinURL))
+                                  title: e.title,
+                                  body: (secs > 25 ? "Beginnt \(Fmt.until(e.start, now: now))" : "Beginnt jetzt") + (e.joinURL == nil ? "" : " · klicken zum Beitreten"),
+                                  url: e.joinURL, hold: max(45, secs + 30), sound: true))
             }
         }
     }
@@ -296,10 +297,12 @@ final class ClaudeSource {
         if j["hook_event_name"] as? String == "LotseFleet" { model.runFleet(); return }
         if j["hook_event_name"] as? String == "LotseDemo" {
             let kind = Notice.Kind(demo: j["kind"] as? String ?? "")
-            model.post(Notice(kind: j["card"] != nil && j["app"] == nil ? .info : kind, appID: j["app"] as? String, appName: j["name"] as? String ?? "Beispiel",
+            var demo = Notice(kind: j["card"] != nil && j["app"] == nil ? .info : kind, appID: j["app"] as? String, appName: j["name"] as? String ?? "Beispiel",
                               title: j["title"] as? String ?? "", body: j["body"] as? String ?? "",
                               url: (j["url"] as? String).flatMap { URL(string: $0) },
-                              brief: j["brief"] as? Bool ?? false, symbol: j["symbol"] as? String, card: j["card"] as? String))
+                              brief: j["brief"] as? Bool ?? false, symbol: j["symbol"] as? String, card: j["card"] as? String)
+            demo.hold = (j["hold"] as? NSNumber)?.doubleValue; demo.sound = j["sound"] as? Bool ?? false
+            model.post(demo)
             return
         }
         guard let event = j["hook_event_name"] as? String,

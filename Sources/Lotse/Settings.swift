@@ -221,6 +221,13 @@ private struct CalendarPane: View {
                 Text("Der Ortsname wird an den Wetterdienst Open-Meteo geschickt. Leer lassen, um das Wetter abzuschalten.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Erinnerungen") {
+                Toggle("Leiser Ton, wenn ein Termin gleich beginnt", isOn: Binding(
+                    get: { UserDefaults.standard.object(forKey: "calendarSound") as? Bool ?? true },
+                    set: { UserDefaults.standard.set($0, forKey: "calendarSound") }))
+                Text("Lotse erinnert zehn Minuten vorher (bleibt zwölf Sekunden stehen) und eine gute Minute vorher – diese Erinnerung bleibt bis kurz nach Beginn stehen, bis du sie wegklickst oder beitrittst. Im Call bleibt der Ton aus.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if model.calendars.isEmpty {
                 Section("Kalender") { Text("Keine Kalender gefunden.").foregroundStyle(.secondary) }
             } else {

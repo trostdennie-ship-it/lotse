@@ -524,7 +524,8 @@ enum Demo {
                 return CalEvent(id: "w\(d)\(h)\(title)", title: title, start: s, end: s.addingTimeInterval(allDay ? 86400 : 3600),
                                 color: Theme.accent, joinURL: nil, allDay: allDay, role: role)
             }
-            m.week = [w(0, 9, "Wochenstart Team"), w(0, 14, "Angebot durchgehen"), w(0, 22.5, "Jour fixe"),
+            let hourNow = now.timeIntervalSince(day0) / 3600
+            m.week = [w(0, max(0, hourNow - 3), "Wochenstart Team"), w(0, max(0, hourNow - 0.4), "Angebot durchgehen"), w(0, min(23, hourNow + 2), "Jour fixe"),
                       w(1, 10, "Zahnarzt", role: .personal), w(1, 13, "Mittagessen Kundin"), w(1, 16, "Abstimmung Kampagnenplanung"),
                       w(2, 0, "Feiertag", allDay: true, role: .none), w(2, 11, "Review Entwurf"),
                       w(3, 9.5, "Teamrunde"), w(3, 15, "Call Agentur"),
