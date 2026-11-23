@@ -24,6 +24,8 @@ struct Notice: Identifiable {
     var hold: TimeInterval? = nil
     /// Leiser Ton beim Erscheinen (Termin beginnt gleich).
     var sound = false
+    /// Der Termin hinter einer Erinnerung – daraus baut die Insel die Terminkarte.
+    var event: CalEvent? = nil
     /// Kleine Meldung ohne Knöpfe (Pille oder Geräte-Karte).
     var small: Bool { brief || card != nil }
 }
@@ -83,6 +85,21 @@ struct CalEvent: Identifiable {
     var joinURL: URL?
     var allDay = false
     var role: CalRole = .none
+    /// Ort des Termins (leer, wenn keiner eingetragen ist) und Name des Kalenders.
+    var place = ""
+    var calendar = ""
+
+    /// Wo der Termin stattfindet: der Dienst des Beitritts-Links oder der eingetragene Ort.
+    var whereLabel: String {
+        if let h = joinURL?.host?.lowercased() {
+            if h.contains("meet.google") { return "Google Meet" }
+            if h.contains("zoom") { return "Zoom" }
+            if h.contains("teams") { return "Teams" }
+            if h.contains("webex") { return "Webex" }
+            return "Videocall"
+        }
+        return place.components(separatedBy: .newlines).first?.trimmingCharacters(in: .whitespaces) ?? ""
+    }
 
     /// Der Titel, wie er gezeigt werden darf: Im Besprechungsmodus bleiben private Termine ohne Namen.
     func label(discreet: Bool) -> String { discreet && role == .personal ? "Privater Termin" : title }
@@ -471,7 +488,7 @@ final class IslandModel: ObservableObject {
         let meetingNow = notice.kind == .calendar && notice.sound
         let urgent = meetingNow || (notice.small && notice.kind == .info) || (notice.sessionID != nil && asks.contains { $0.sessionID == notice.sessionID })
         if notice.kind == .calendar { log("Termin-Erinnerung: \(discreet ? "(Titel verborgen)" : notice.title) – \(notice.body)\(silent && !urgent ? " · stumm (Bildschirm wird geteilt)" : mode == .expanded ? " · Insel offen, folgt beim Zuklappen" : "")") }
-        if notice.sound, UserDefaults.standard.object(forKey: "calendarSound") as? Bool ?? true, !inCall { NSSound(named: "Tink")?.play() }
+        if notice.sound, UserDefaults.standard.object(forKey: "calendarSound") as? Bool ?? true, !inCall { Self.playMeetingSound() }
         if silent, !urgent {
             if notice.kind != .system, mode != .expanded { unread += 1 }
             return
@@ -522,6 +539,14 @@ final class IslandModel: ObservableObject {
         }
         peekWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + (shown.hold ?? (shown.card == "mail" ? 5 : shown.card != nil ? 3.6 : shown.brief ? 2.2 : 6)), execute: work)
+    }
+
+    /// Der Ton der Termin-Erinnerung: ein Echolot-Ping (Resources/Termin.wav). Fehlt die Datei, ein Systemton.
+    private static let meetingSound: NSSound? = Bundle.main.url(forResource: "Termin", withExtension: "wav")
+        .flatMap { NSSound(contentsOf: $0, byReference: true) } ?? NSSound(named: "Tink")
+    static func playMeetingSound() {
+        meetingSound?.stop()
+        meetingSound?.play()
     }
 
     /// Termin-Erinnerung, die auf das Zuklappen der Insel wartet.

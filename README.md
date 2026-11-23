@@ -5,7 +5,7 @@ Lotse ist eine kleine Insel oben in der Mitte des Mac-Bildschirms – am Notch d
 ## Was Lotse kann
 
 - **Claude Code im Blick:** laufende Sessions mit Status, Fortschritt und Arbeitsdauer; Freigaben direkt in der Insel erlauben oder ablehnen; riskante Befehle werden markiert; Fragen von Claude erscheinen als Frage.
-- **Kalender:** nächster Termin, Wochenübersicht, Erinnerung zehn Minuten vorher und zum Beginn, „Beitreten“ bei Zoom-, Teams- und Meet-Links.
+- **Kalender:** nächster Termin, Wochenübersicht, Erinnerung fünf Minuten vorher und zum Beginn, „Beitreten“ bei Zoom-, Teams- und Meet-Links.
 - **Mitteilungen:** spiegelt, was andere Apps melden (Mail, Slack, Chrome …), mit einem Filter dafür, was die Insel aufklappen darf.
 - **Arbeitsplatz:** Fokus-Timer, Verlauf der Zwischenablage, Mitschnitt von Calls (nur Ton) mit Transkript auf dem Gerät.
 - **Ablage:** Dateien auf die Insel ziehen und kurz parken, Bilder umwandeln.

@@ -222,10 +222,11 @@ private struct CalendarPane: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Erinnerungen") {
-                Toggle("Leiser Ton, wenn ein Termin gleich beginnt", isOn: Binding(
+                Toggle("Ton, wenn ein Termin beginnt", isOn: Binding(
                     get: { UserDefaults.standard.object(forKey: "calendarSound") as? Bool ?? true },
                     set: { UserDefaults.standard.set($0, forKey: "calendarSound") }))
-                Text("Lotse erinnert zehn Minuten vorher (bleibt zwölf Sekunden stehen) und eine gute Minute vorher – diese Erinnerung bleibt bis kurz nach Beginn stehen, bis du sie wegklickst oder beitrittst. Im Call bleibt der Ton aus.")
+                Button("Ton anhören") { IslandModel.playMeetingSound() }
+                Text("Lotse erinnert fünf Minuten vorher ohne Ton (bleibt zwölf Sekunden stehen) und zum Beginn mit Ton – diese Erinnerung bleibt eine Minute stehen, bis du sie wegklickst oder beitrittst. Im Call bleibt der Ton aus.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if model.calendars.isEmpty {

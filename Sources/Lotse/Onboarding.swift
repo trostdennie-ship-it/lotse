@@ -273,7 +273,7 @@ private struct OnboardingView: View {
     }
 
     @ViewBuilder private var calendar: some View {
-        title("Kalender", "Lotse zeigt deinen nächsten Termin, erinnert zehn Minuten vorher und zum Beginn und bietet bei Zoom-, Teams- und Meet-Links „Beitreten“ an. Es liest dafür die Kalender, die in der Kalender-App deines Macs eingerichtet sind.")
+        title("Kalender", "Lotse zeigt deinen nächsten Termin, erinnert fünf Minuten vorher und zum Beginn und bietet bei Zoom-, Teams- und Meet-Links „Beitreten“ an. Es liest dafür die Kalender, die in der Kalender-App deines Macs eingerichtet sind.")
         switch status.calendar {
         case .fullAccess:
             state(true, "Kalenderzugriff erteilt.", "")

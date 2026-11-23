@@ -853,6 +853,9 @@ struct TopRow: View {
 
     static func status(for model: IslandModel) -> Status {
         if model.mode == .peek, let n = model.peekNotice, !n.small {
+            if n.kind == .calendar, n.event != nil {
+                return Status(text: "Termin", color: Theme.accent, pulsing: true)
+            }
             return Status(text: n.kind == .system ? n.appName : n.title, color: Theme.accent, pulsing: true)
         }
         if model.mode == .drop { return Status(text: "Ablage", color: Theme.accent, pulsing: true) }
@@ -1084,6 +1087,8 @@ struct PeekView: View {
             Group {
                 if let ask = model.peekAsk {
                     AskScene(model: model, ask: ask, staged: true)
+                } else if notice.kind == .calendar, let e = notice.event {
+                    CalendarPeek(model: model, notice: notice, event: e)
                 } else if let s = doneSession {
                     VStack(alignment: .leading, spacing: 11) {
                         DoneScene(model: model, session: s, staged: true)
@@ -1134,6 +1139,61 @@ struct PeekView: View {
             .modifier(SlideIn(delay: 0.78, active: notice.kind == .claude))
             Spacer(minLength: 0)
         }
+    }
+}
+
+/// Die Terminkarte einer Erinnerung: Man soll sofort sehen, welcher Termin gemeint ist.
+struct CalendarPeek: View {
+    @ObservedObject var model: IslandModel
+    let notice: Notice
+    let event: CalEvent
+
+    private var title: String { event.label(discreet: model.discreet) }
+    private var span: String { "\(Fmt.time.string(from: event.start)) – \(Fmt.time.string(from: event.end))" }
+    private var minutes: Int { max(0, Int(ceil(event.start.timeIntervalSince(model.now) / 60))) }
+    private var started: Bool { event.start <= model.now }
+    private var duration: String {
+        let m = Int(event.end.timeIntervalSince(event.start) / 60)
+        return m >= 60 && m % 60 == 0 ? "\(m / 60) Std" : m > 60 ? "\(m / 60) Std \(m % 60) Min" : "\(m) Min"
+    }
+    private var place: String { model.discreet && event.role == .personal ? "" : event.whereLabel }
+
+    private var buttons: some View {
+        HStack(spacing: 8) {
+            Button("Später") { model.dismissPeek() }.buttonStyle(CapsuleStyle(compact: true))
+            Button(notice.url != nil ? "Beitreten" : "OK") { model.open(notice); model.dismissPeek() }
+                .buttonStyle(CapsuleStyle(primary: true, compact: true))
+        }
+    }
+
+    /// Eine Kennzeile (wie bald, von wann bis wann), der Titel groß, Eckdaten als Marken, Knöpfe rechts.
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 6) {
+                Circle().fill(event.color).frame(width: 7, height: 7)
+                Text((started ? "BEGINNT JETZT" : "IN \(minutes) MIN") + " · " + span)
+                    .font(Theme.font(10.5, .semibold)).tracking(0.7).monospacedDigit().foregroundStyle(Theme.accent)
+            }
+            Text(title).font(Theme.font(18, .semibold)).foregroundStyle(Theme.text)
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .center, spacing: 6) {
+                if let s = event.role.symbol { chip(s, event.role.title) }
+                if !place.isEmpty { chip(event.joinURL != nil ? "video.fill" : "mappin.and.ellipse", place) }
+                chip("clock", duration)
+                Spacer(minLength: 8)
+                buttons
+            }
+        }
+    }
+
+    private func chip(_ symbol: String, _ text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol).font(.system(size: 9, weight: .medium))
+            Text(text).font(Theme.font(11)).lineLimit(1)
+        }
+        .foregroundStyle(Theme.soft)
+        .padding(.horizontal, 8).frame(height: 22)
+        .background(Capsule().fill(Theme.tile))
     }
 }
 

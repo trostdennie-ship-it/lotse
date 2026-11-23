@@ -586,6 +586,15 @@ enum Demo {
         case "compact-calm": m.sessions = []; m.track?.isPlaying = false; m.events = []
         case "peek": m.mode = .peek
         case "peek-system": m.peekNotice = m.notices[0]; m.mode = .peek
+        case "peek-cal", "peek-cal-long":
+            let long = mode == "peek-cal-long"
+            let e = CalEvent(id: "p", title: long ? "Abstimmung Kampagnenplanung Q1 mit Agentur und Einkauf" : "Jour fixe Vertrieb",
+                             start: now.addingTimeInterval(60), end: now.addingTimeInterval(3660), color: Color(red: 0.36, green: 0.62, blue: 0.95),
+                             joinURL: long ? nil : URL(string: "https://meet.google.com/abc"), role: .work, place: long ? "Raum Elbe, 3. OG" : "", calendar: "Arbeit")
+            m.now = now
+            m.peekNotice = Notice(kind: .calendar, appID: "com.apple.iCal", appName: "Kalender · Arbeit", title: e.title,
+                                  body: "Beginnt in 1 Min" + (long ? "" : " · klicken zum Beitreten"), url: e.joinURL, sound: true, event: e)
+            m.mode = .peek
         case "ask", "home-ask", "ask-risk", "question":
             m.sessions[0].status = .waiting
             var ask = PermissionAsk(id: "x", sessionID: "a", project: "Lotse", tool: "Bash", detail: "npm test")

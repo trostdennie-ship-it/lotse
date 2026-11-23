@@ -14,6 +14,7 @@ cp .build/release/Lotse "$APP/Contents/MacOS/Lotse"
 # App-Symbol (neu erzeugen: python3 scripts/make-icon.py)
 mkdir -p "$APP/Contents/Resources"
 [ -f Resources/Lotse.icns ] && cp Resources/Lotse.icns "$APP/Contents/Resources/Lotse.icns"
+[ -f Resources/Termin.wav ] && cp Resources/Termin.wav "$APP/Contents/Resources/Termin.wav"
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

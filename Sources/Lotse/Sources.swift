@@ -118,7 +118,8 @@ final class CalendarSource {
                     id: (e.eventIdentifier ?? UUID().uuidString) + "\(e.startDate.timeIntervalSince1970)",
                     title: e.title ?? "Termin", start: e.startDate, end: e.endDate,
                     color: Color(nsColor: e.calendar.color), joinURL: Self.joinURL(e),
-                    role: roles[e.calendar.calendarIdentifier] ?? .none)
+                    role: roles[e.calendar.calendarIdentifier] ?? .none,
+                    place: e.location ?? "", calendar: e.calendar.title)
             }
         model.events = Array(events)
         // Die Woche: heute und die sechs Tage danach, diesmal mit ganztägigen Terminen.
@@ -137,18 +138,19 @@ final class CalendarSource {
 
         for e in events {
             let secs = e.start.timeIntervalSince(now)
-            let key10 = e.id + "-10", key0 = e.id + "-0"
-            if secs > 0, secs <= 600, secs > 90, !alerted.contains(key10) {
-                alerted.insert(key10)
-                model.post(Notice(kind: .calendar, appID: "com.apple.iCal", appName: e.role == .none ? "Kalender" : "Kalender · \(e.role.title)",
-                                  title: e.title, body: "Beginnt \(Fmt.until(e.start, now: now)) · \(Fmt.time.string(from: e.start))",
-                                  url: e.joinURL, hold: 12))
-            } else if secs <= 90, secs > -120, !alerted.contains(key0) {
-                alerted.insert(key0); alerted.insert(key10)
-                model.post(Notice(kind: .calendar, appID: "com.apple.iCal", appName: e.role == .none ? "Kalender" : "Kalender · \(e.role.title)",
-                                  title: e.title,
-                                  body: (secs > 25 ? "Beginnt \(Fmt.until(e.start, now: now))" : "Beginnt jetzt") + (e.joinURL == nil ? "" : " · klicken zum Beitreten"),
-                                  url: e.joinURL, hold: max(45, secs + 30), sound: true))
+            let key5 = e.id + "-5", key0 = e.id + "-0"
+            let app = e.role == .none ? "Kalender" : "Kalender · \(e.role.title)"
+            // Fünf Minuten vorher still, zum Beginn mit Ton. Der Kalender wird alle 30 Sekunden gelesen,
+            // deshalb gilt „Beginn" ab 15 Sekunden davor.
+            if secs <= 300, secs > 15, !alerted.contains(key5) {
+                alerted.insert(key5)
+                model.post(Notice(kind: .calendar, appID: "com.apple.iCal", appName: app, title: e.title,
+                                  body: "Beginnt \(Fmt.until(e.start, now: now)) · \(Fmt.time.string(from: e.start))",
+                                  url: e.joinURL, hold: 12, event: e))
+            } else if secs <= 15, secs > -120, !alerted.contains(key0) {
+                alerted.insert(key0); alerted.insert(key5)
+                model.post(Notice(kind: .calendar, appID: "com.apple.iCal", appName: app, title: e.title,
+                                  body: "Beginnt jetzt", url: e.joinURL, hold: 60, sound: true, event: e))
             }
         }
     }
@@ -302,6 +304,14 @@ final class ClaudeSource {
                               url: (j["url"] as? String).flatMap { URL(string: $0) },
                               brief: j["brief"] as? Bool ?? false, symbol: j["symbol"] as? String, card: j["card"] as? String)
             demo.hold = (j["hold"] as? NSNumber)?.doubleValue; demo.sound = j["sound"] as? Bool ?? false
+            // Probe einer Termin-Erinnerung: "start_in" (Sekunden bis zum Beginn), dazu "minutes", "place", "role", "url".
+            if kind == .calendar, let startIn = (j["start_in"] as? NSNumber)?.doubleValue {
+                let start = Date().addingTimeInterval(startIn)
+                demo.event = CalEvent(id: "demo", title: demo.title, start: start,
+                                      end: start.addingTimeInterval(((j["minutes"] as? NSNumber)?.doubleValue ?? 60) * 60),
+                                      color: Theme.accent, joinURL: demo.url, role: CalRole(rawValue: j["role"] as? String ?? "") ?? .none,
+                                      place: j["place"] as? String ?? "")
+            }
             model.post(demo)
             return
         }
