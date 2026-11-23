@@ -604,10 +604,13 @@ struct Mascot: View {
             let moving = state == .sailing || shift != 0
             let wave = Self.waves[moving ? frame % 3 : 0]
             let sea0 = Color.white.opacity(state == .idle && !bright ? 0.22 : 0.42)
-            if let time, moving, lit, (printing ?? 1) >= 1 {
+            if let time, lit, (printing ?? 1) >= 1 {
                 // Die Wellen wandern stufenlos nach links (ein Rasterschritt je 0,28 s); an den Rändern blenden sie aus.
+                // Steht das Boot oder der Leuchtturm, bleiben sie am Ort. In beiden Fällen plätschert das Wasser leicht:
+                // Jeder Punkt hebt und senkt sich ein wenig, versetzt zu seinen Nachbarn.
                 let n = 12 * k, base = Array(Self.waves[0])
-                let phase = (time / (0.28 / Double(k))).truncatingRemainder(dividingBy: 3)
+                let phase = moving ? (time / (0.28 / Double(k))).truncatingRemainder(dividingBy: 3) : 0
+                func lap(_ x: Int) -> CGFloat { CGFloat(sin(time * 2 * .pi / 2.6 + Double(x) * 1.9 / Double(k))) * unit * 0.11 }
                 let whole = Int(phase), frac = CGFloat(phase - Double(whole))
                 for x in 0...n {
                     let src = (x + whole) % 12
@@ -615,9 +618,9 @@ struct Mascot: View {
                     let edge = min(1, max(0, min(pos + 1, CGFloat(n) - pos)))
                     guard edge > 0 else { continue }
                     if fine {
-                        cell(x, Self.boat.count * 2 + (base[src] == "w" ? 1 : 0), sea0.opacity(Double(edge)), dx: -frac * px)
+                        cell(x, Self.boat.count * 2 + (base[src] == "w" ? 1 : 0), sea0.opacity(Double(edge)), dx: -frac * px, dy: lap(x + whole))
                     } else if base[src] == "w" {
-                        cell(x, Self.boat.count, sea0.opacity(Double(edge)), dx: -frac * px)
+                        cell(x, Self.boat.count, sea0.opacity(Double(edge)), dx: -frac * px, dy: lap(x + whole))
                     }
                 }
             } else if fine, lit, (printing ?? 1) >= 1 {
