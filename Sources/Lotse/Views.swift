@@ -679,6 +679,25 @@ struct IslandView: View {
         switch model.mode {
         case .compact: return compactWidth
         case .peek:
+            return max(peekWidth(wings), headerNeed)
+        case .drop: return max(380, wings, headerNeed)
+        case .expanded:
+            // Eine Breite für alle Reiter: So bleiben die Symbole der Kopfzeile beim Wechsel an ihrem Platz,
+            // nur die Höhe und der Inhalt darunter ändern sich.
+            return max(760, wings)
+        }
+    }
+
+    /// Am Notch: so breit, dass der Text der Kopfzeile ganz in den linken Flügel passt – gekürzt wird erst ab 200 Punkten.
+    private var headerNeed: CGFloat {
+        guard model.hasNotch else { return 0 }
+        let s = TopRow.status(for: model)
+        let w = ceil(((s.short.isEmpty ? s.text : s.short) as NSString).size(withAttributes: [.font: NSFont.menuBarFont(ofSize: 0)]).width)
+        return model.notchWidth + 12 + 44 + 2 * (min(w, 200) + 20)      // Aussparung mit Luft, Ränder, je Flügel Punkt + Text
+    }
+
+    private func peekWidth(_ wings: CGFloat) -> CGFloat {
+        do {
             if model.peekAsk != nil { return max(560, wings) }
             // Kurze Bestätigungen bleiben eine schmale Pille; alles andere wird eine Karte.
             if let n = model.peekNotice, let c = n.card { return max(c == "mail" ? 430 : 344, compactWidth) }
@@ -689,11 +708,6 @@ struct IslandView: View {
                 return max(min(ceil(w) + 84, 470), compactWidth)
             }
             return max(470, wings)
-        case .drop: return max(380, wings)
-        case .expanded:
-            // Eine Breite für alle Reiter: So bleiben die Symbole der Kopfzeile beim Wechsel an ihrem Platz,
-            // nur die Höhe und der Inhalt darunter ändern sich.
-            return max(760, wings)
         }
     }
 
@@ -1002,7 +1016,9 @@ struct TopRow: View {
             if n.kind == .calendar, n.event != nil {
                 return Status(text: "Termin", color: Theme.accent, pulsing: true)
             }
-            return Status(text: n.kind == .system ? n.appName : n.title, color: Theme.accent, pulsing: true)
+            // Am Notch steht in der Kopfzeile nur, von wem der Hinweis kommt – der Titel steht ohnehin in der Karte darunter.
+            let from = n.appName.components(separatedBy: " · ").first ?? ""
+            return Status(text: n.kind == .system ? n.appName : n.title, short: from.isEmpty ? n.title : from, color: Theme.accent, pulsing: true)
         }
         if model.mode == .drop { return Status(text: "Ablage", color: Theme.accent, pulsing: true) }
         // Im Besprechungsmodus nennt die Pille keine Projekt- oder Terminnamen.
@@ -1046,6 +1062,12 @@ struct TopRow: View {
         return Status(text: "")
     }
 
+    /// Der Statustext, aufgeteilt auf die beiden Flügel am Notch: vor und nach dem ersten „ · ".
+    static func halves(_ s: Status) -> (String, String) {
+        guard let r = s.text.range(of: " · ") else { return (s.text, "") }
+        return (String(s.text[..<r.lowerBound]), String(s.text[r.upperBound...]))
+    }
+
     /// Ob rechts in der Ruhe-Pille etwas steht (Zähler, Timer, Arbeitsdauer, Besprechungsmodus).
     static func hasTrail(_ model: IslandModel) -> Bool {
         if case .recording = model.recState { return true }
@@ -1059,8 +1081,21 @@ struct TopRow: View {
                 // Nichts zu melden: nur das Boot, mittig.
                 Mascot(size: 25, state: boat).frame(maxWidth: .infinity)
             } else {
+                if model.hasNotch {
+                    // Am Notch: zwei gleich breite Flügel, dazwischen die Aussparung. Was nicht in einen Flügel
+                    // passt, wird gekürzt – hinter der Aussparung könnte es niemand lesen.
+                    HStack(spacing: 8) { if model.mode == .expanded { tabs } else { lead } }
+                        .frame(maxWidth: .infinity, alignment: .leading).clipped()
+                    Color.clear.frame(width: max(0, model.notchWidth + 12 - 16))      // 6 Punkte Luft je Seite, abzüglich der Abstände
+                    HStack(spacing: 8) {
+                        if model.mode == .compact, case .recording = model.recState { trail }      // der Mitschnitt bleibt immer sichtbar
+                        else if model.mode == .compact { Ticker(full: Self.halves(status).1, alignment: .trailing, stay: false, color: Theme.soft) { trail } }
+                        else { trail }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .trailing).clipped()
+                } else {
                 if model.mode == .expanded { tabs } else { lead }
-                if model.mode == .compact, !model.hasNotch {
+                if model.mode == .compact {
                     // Zugeklappt ohne Notch: Die Laufzeit rückt bis auf denselben Abstand an den Text heran,
                     // den auch das Boot zum Text hat. Der Text darf sich zuerst ausbreiten.
                     trail.fixedSize()
@@ -1070,8 +1105,9 @@ struct TopRow: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 } else {
-                    Spacer(minLength: model.hasNotch ? model.notchWidth : 10)
+                    Spacer(minLength: 10)
                     trail
+                }
                 }
             }
         }
@@ -1088,11 +1124,16 @@ struct TopRow: View {
         } else {
             Dot(color: s.color, pulsing: s.pulsing).id("\(s.pulsing)-\(model.mode == .peek)")
         }
-        Text(model.hasNotch && !(s.short.isEmpty && model.mode == .peek) ? s.short : s.text)
-            .font(Theme.bar).foregroundStyle(Theme.text).lineLimit(1)
-            // Am Notch darf der Text nur den linken Flügel füllen.
-            .frame(maxWidth: model.hasNotch ? max(60, (model.pillSize.width - model.notchWidth) / 2 - 56) : nil, alignment: .leading)
-            .layoutPriority(1)
+        if model.hasNotch, model.mode == .compact {
+            // Zugeklappt am Notch: links, worum es geht (danach das Kurzwort), rechts die Einzelheit (danach Laufzeit oder Zähler).
+            Ticker(full: Self.halves(s).0) {
+                Text(s.short).font(Theme.bar).foregroundStyle(Theme.text).lineLimit(1)
+            }
+        } else {
+            Text(model.hasNotch && !(s.short.isEmpty && model.mode == .peek) ? s.short : s.text)
+                .font(Theme.bar).foregroundStyle(Theme.text).lineLimit(1)
+                .layoutPriority(1)
+        }
     }
 
     private var boat: Mascot.State {
@@ -1154,7 +1195,13 @@ struct TopRow: View {
     @ViewBuilder private var trail: some View {
         if model.mode == .expanded {
             if !note.isEmpty {
-                Text(note).font(Theme.font(12)).foregroundStyle(Color.white.opacity(0.45)).lineLimit(1).padding(.trailing, 6)
+                // Passt der Projektname nicht in den Flügel, bleibt nur „fertig in …" – die Session steht darunter.
+                ViewThatFits(in: .horizontal) {
+                    Text(note).fixedSize()
+                    Text(note.range(of: "fertig in ").map { String(note[$0.lowerBound...]) } ?? note).fixedSize()
+                    Text(note)
+                }
+                .font(Theme.font(12)).foregroundStyle(Color.white.opacity(0.45)).lineLimit(1).padding(.trailing, 6)
             }
             tool("wifi", "WLAN-Einstellungen öffnen") {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.wifi-settings-extension")!)
@@ -1196,6 +1243,82 @@ struct TopRow: View {
                     .accessibilityLabel("Claude arbeitet seit \(Int(ctx.date.timeIntervalSince(since)) / 60) Minuten")
             }
         }
+    }
+}
+
+/// Laufschrift in einem Flügel neben der Aussparung: Ändert sich der Text, läuft er einmal durch
+/// (Anfang kurz stehen lassen, dann bis zum Ende schieben), danach steht wieder der Ruhe-Inhalt (`rest`):
+/// links das Kurzwort, rechts Laufzeit oder Zähler. Zwischen zwei Läufen liegen mindestens 12 Sekunden Ruhe –
+/// sonst liefe sie bei jeder kleinen Änderung los und würde ständig am Blickrand zappeln.
+struct Ticker<Rest: View>: View {
+    let full: String
+    var alignment: Alignment = .leading
+    /// Passt der Text ganz in den Flügel: bleibt er stehen (links), oder macht er nach ein paar Sekunden Platz (rechts)?
+    var stay = true
+    var color: Color = Theme.text
+    @ViewBuilder var rest: Rest
+    @State private var latest = ""          // der aktuelle Text, für die Schleife unten
+    @State private var shown = ""           // der Text, der gerade durchläuft
+    @State private var start: Date?
+    @State private var wing: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var still
+
+    private static var speed: Double { 34 }
+    private static var lead: Double { 0.9 }
+    private static var hold: Double { 1.1 }
+    private static var pause: Double { 12 }
+    private static func width(_ s: String) -> CGFloat {
+        ceil((s as NSString).size(withAttributes: [.font: NSFont.menuBarFont(ofSize: 0)]).width)
+    }
+
+    var body: some View {
+        GeometryReader { g in
+            Group {
+                if let start, !shown.isEmpty {
+                    let over = max(0, Self.width(shown) - g.size.width)
+                    TimelineView(.animation(paused: over == 0)) { ctx in
+                        let t = ctx.date.timeIntervalSince(start)
+                        label(shown).fixedSize().offset(x: -min(max(0, (t - Self.lead) * Self.speed), over))
+                    }
+                    .frame(width: g.size.width, alignment: over > 0 ? .leading : alignment).clipped()
+                    .mask(LinearGradient(stops: [.init(color: over > 0 ? .clear : .black, location: 0), .init(color: .black, location: 0.08),
+                                                 .init(color: .black, location: 0.9), .init(color: over > 0 ? .clear : .black, location: 1)],
+                                         startPoint: .leading, endPoint: .trailing))
+                    .transition(.opacity)
+                } else if stay, !full.isEmpty, Self.width(full) <= g.size.width {
+                    label(full).transition(.opacity)         // passt ganz: dann steht einfach der volle Text da
+                } else {
+                    rest.transition(.opacity)
+                }
+            }
+            .frame(width: g.size.width, height: g.size.height, alignment: alignment)
+            .onChange(of: g.size.width, initial: true) { _, w in wing = w }
+        }
+        .onChange(of: full, initial: true) { _, f in latest = f }
+        // Eine Schleife statt eines Laufs je Änderung: Ein laufender Text wird zu Ende gezeigt, auch wenn inzwischen
+        // ein neuer da ist – sonst käme bei schnellen Wechseln nie einer durch.
+        .task {
+            var done = ""
+            while !Task.isCancelled {
+                let text = latest
+                let fits = Self.width(text) <= wing
+                if text == done || text.isEmpty || wing <= 0 || (fits && stay) || (!fits && still) {
+                    if text.isEmpty { done = "" }
+                    try? await Task.sleep(for: .seconds(0.3)); continue
+                }
+                shown = text; done = text
+                withAnimation(.easeInOut(duration: 0.3)) { start = Date() }
+                let over = max(0, Self.width(text) - wing)
+                try? await Task.sleep(for: .seconds(fits ? 4 : Self.lead + over / Self.speed + Self.hold))
+                withAnimation(.easeInOut(duration: 0.3)) { start = nil }
+                try? await Task.sleep(for: .seconds(Self.pause))
+            }
+        }
+        .accessibilityLabel(full)
+    }
+
+    private func label(_ s: String) -> some View {
+        Text(s).font(Theme.bar).foregroundStyle(color).lineLimit(1)
     }
 }
 

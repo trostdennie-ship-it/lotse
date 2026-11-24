@@ -108,6 +108,10 @@ final class CalendarSource {
                 .compactMap { $0.title?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
         }
         model.hiddenEventTitles = titles(hiddenCals).subtracting(titles(chosen))
+        // Für Einladungen: Sie gelten nur, wenn der Termin in einem angezeigten Kalender steht (auch weiter voraus).
+        let far = cal.date(byAdding: .day, value: 120, to: cal.startOfDay(for: now))!
+        model.shownEventTitles = chosen.isEmpty ? [] : Set(store.events(matching: store.predicateForEvents(withStart: from, end: far, calendars: chosen))
+            .compactMap { $0.title?.trimmingCharacters(in: .whitespacesAndNewlines) })
         guard !chosen.isEmpty else { model.events = []; model.week = []; return }
         let raw = store.events(matching: store.predicateForEvents(withStart: cal.startOfDay(for: now), end: end, calendars: chosen))
         let events = raw
@@ -776,6 +780,7 @@ final class NotificationSource {
         }
 
         let initial = lastID < 0
+        let seenID = Int64(UserDefaults.standard.integer(forKey: "lastNoticeID"))
         guard let rows = read(db, initial ? "ORDER BY r.rec_id DESC LIMIT 8"
                                           : "WHERE r.rec_id > ?1 ORDER BY r.rec_id ASC LIMIT 20",
                               initial ? nil : lastID) else { return }
@@ -784,8 +789,13 @@ final class NotificationSource {
             maxID = max(maxID, row.id)
             if row.date > now { pending[row.id] = row.date; continue }
             if !initial { emit(row, peek: true) }
-            else if now.timeIntervalSince(row.date) < 3 * 3600 { emit(row, peek: false) }  // beim Start nur Frisches, still
+            // Beim Start nur Frisches, still – außer es kam an, während Lotse gerade neu startete (Update, Neubau):
+            // Das hat noch niemand gesehen und klappt deshalb auf.
+            else if now.timeIntervalSince(row.date) < 3 * 3600 {
+                emit(row, peek: seenID > 0 && row.id > seenID && now.timeIntervalSince(row.date) < 600)
+            }
         }
+        if maxID > seenID { UserDefaults.standard.set(maxID, forKey: "lastNoticeID") }
         if initial { log("Mitteilungen verbunden, letzte ID \(maxID), geplant \(pending.count)") }
         dropRead(db, now: now)
         model.notificationsDenied = false
@@ -834,6 +844,11 @@ final class NotificationSource {
                 if facts.kind == .calendar, facts.category.contains("TriggeredEvent"), verdict == .popUp { verdict = .quiet }
                 // Termine aus Kalendern, die in Lotse ausgeblendet sind, gar nicht übernehmen.
                 if facts.kind == .calendar, [title, sub].contains(where: { model.hiddenEventTitles.contains($0.trimmingCharacters(in: .whitespacesAndNewlines)) }) {
+                    verdict = .drop
+                }
+                // Einladungen meldet macOS aus allen Konten. Steht der Termin in keinem angezeigten Kalender, bleibt sie draußen.
+                if app.lowercased() == "com.apple.ical", facts.category.contains("EventInvitation"), let shown = model.shownEventTitles,
+                   !shown.contains(title.trimmingCharacters(in: .whitespacesAndNewlines)) {
                     verdict = .drop
                 }
             }

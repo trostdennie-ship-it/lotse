@@ -344,6 +344,8 @@ final class IslandModel: ObservableObject {
     /// Alle Termine der nächsten sieben Tage (mit ganztägigen) – für die Wochenansicht im Überblick.
     /// Titel von Terminen, die nur in ausgeblendeten Kalendern stehen – deren Mac-Mitteilungen bleiben draußen.
     var hiddenEventTitles: Set<String> = []
+    /// Titel aller Termine in den angezeigten Kalendern (nil, solange der Kalender nicht gelesen wurde).
+    var shownEventTitles: Set<String>?
     @Published var week: [CalEvent] = []
     @Published var showWeek = false
     @Published var calendars: [CalendarChoice] = []
