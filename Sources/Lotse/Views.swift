@@ -1036,6 +1036,11 @@ struct TopRow: View {
         // Arbeitet Claude, zeigt die Pille, woran – der nächste Termin drängt sich erst fünf Minuten vorher vor.
         if let e = model.nextEvent, e.start.timeIntervalSince(model.now) < (busy ? 300 : 3600),
            !busy || e.start.timeIntervalSince(model.now) > -60 {
+            // Läuft der Termin schon, sagt die Pille, welcher es ist und bis wann – „läuft" allein erklärt nichts.
+            if e.start <= model.now {
+                let end = "bis " + Fmt.time.string(from: e.end)
+                return Status(text: (hide ? "Termin" : e.title) + " · " + end, short: "Termin", color: Theme.accent)
+            }
             let t = Fmt.until(e.start, now: model.now)
             return Status(text: hide ? "Termin \(t)" : "\(e.title) \(t)", short: t, color: Theme.accent, pulsing: e.start.timeIntervalSince(model.now) < 300)
         }
@@ -1089,7 +1094,7 @@ struct TopRow: View {
                     Color.clear.frame(width: max(0, model.notchWidth + 12 - 16))      // 6 Punkte Luft je Seite, abzüglich der Abstände
                     HStack(spacing: 8) {
                         if model.mode == .compact, case .recording = model.recState { trail }      // der Mitschnitt bleibt immer sichtbar
-                        else if model.mode == .compact { Ticker(full: Self.halves(status).1, alignment: .trailing, stay: false, color: Theme.soft) { trail } }
+                        else if model.mode == .compact { Ticker(full: Self.halves(status).1, alignment: .trailing, stay: !Self.hasTrail(model), color: Theme.soft) { trail } }
                         else { trail }
                     }
                     .frame(maxWidth: .infinity, alignment: .trailing).clipped()
@@ -1253,7 +1258,8 @@ struct TopRow: View {
 struct Ticker<Rest: View>: View {
     let full: String
     var alignment: Alignment = .leading
-    /// Passt der Text ganz in den Flügel: bleibt er stehen (links), oder macht er nach ein paar Sekunden Platz (rechts)?
+    /// Passt der Text ganz in den Flügel: bleibt er stehen, oder macht er nach ein paar Sekunden Platz (rechts, wenn dort
+    /// sonst Laufzeit oder Zähler stehen)?
     var stay = true
     var color: Color = Theme.text
     @ViewBuilder var rest: Rest
