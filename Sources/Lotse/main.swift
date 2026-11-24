@@ -175,7 +175,7 @@ final class IslandController {
         // Zugeklappt zählt die berechnete Pillengröße. Die gemessene kann veraltet sein – etwa solange ein Dialog offen ist
         // und die Insel nicht neu gezeichnet wird; dann klappte sie schon weit vor der Pille auf.
         if model.mode == .compact {
-            size = CGSize(width: IslandView.compactWidth(model), height: min(size.height, max(model.topInset + (model.hasNotch ? IslandView.chin : 0), 30)))
+            size = CGSize(width: IslandView.compactWidth(model), height: min(size.height, max(model.topInset, 30)))
         }
         let rect = NSRect(x: f.midX - size.width / 2 - margin, y: f.maxY - size.height - margin,
                           width: size.width + 2 * margin, height: size.height + margin + 4)

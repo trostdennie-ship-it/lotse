@@ -724,15 +724,15 @@ struct IslandView: View {
         }
     }
 
-    static let chin: CGFloat = 3
+    /// Am Notch liegt die Leuchtlinie so viel tiefer: Die Aussparung reicht bis zur Unterkante der Menüleiste
+    /// und würde sie sonst verdecken. Die Pille selbst bleibt so hoch wie die Menüleiste und verdeckt nichts.
+    static let chin: CGFloat = 2.5
 
     var body: some View {
         VStack(spacing: 0) {
             TopRow(model: model).frame(height: model.topInset)
             switch model.mode {
-            // Die Aussparung reicht bis an die Unterkante der Menüleiste und verdeckt dort die Leuchtlinie –
-            // am Notch ragt die Pille deshalb ein Stück darunter hervor.
-            case .compact: if model.hasNotch { Color.clear.frame(height: IslandView.chin) }
+            case .compact: EmptyView()
             case .peek:
                 if let n = model.peekNotice { PeekView(model: model, notice: n).id(n.id).transition(.emerge) }
             case .drop:
@@ -767,7 +767,7 @@ struct IslandView: View {
                     if model.wave == .outline {
                         OutlineGlow(radius: radius)
                     } else {
-                        WorkWave(style: model.wave).frame(height: 22).padding(.horizontal, 10).offset(y: 19)
+                        WorkWave(style: model.wave).frame(height: 22).padding(.horizontal, 10).offset(y: 19 + (model.hasNotch ? IslandView.chin : 0))
                     }
                 }
                 .allowsHitTesting(false).transition(.opacity)
