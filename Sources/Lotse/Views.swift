@@ -724,11 +724,15 @@ struct IslandView: View {
         }
     }
 
+    static let chin: CGFloat = 3
+
     var body: some View {
         VStack(spacing: 0) {
             TopRow(model: model).frame(height: model.topInset)
             switch model.mode {
-            case .compact: EmptyView()
+            // Die Aussparung reicht bis an die Unterkante der Menüleiste und verdeckt dort die Leuchtlinie –
+            // am Notch ragt die Pille deshalb ein Stück darunter hervor.
+            case .compact: if model.hasNotch { Color.clear.frame(height: IslandView.chin) }
             case .peek:
                 if let n = model.peekNotice { PeekView(model: model, notice: n).id(n.id).transition(.emerge) }
             case .drop:
@@ -955,6 +959,7 @@ struct IslandSurface: ViewModifier {
                             .opacity(1)
                             .shadow(color: .black.opacity(compact ? 0 : 0.45), radius: 24, y: 10)
                     )
+                    .overlay(rim)      // feine Kante: ohne sie verschwindet die Fläche vor dunklen Fenstern
             }
         } else if style == .frosted || style == .liquid {
             painted(content, blur: true, opacity: 0.38)
@@ -1305,6 +1310,7 @@ struct CalendarPeek: View {
             Button(notice.url != nil ? "Beitreten" : "OK") { model.open(notice); model.dismissPeek() }
                 .buttonStyle(CapsuleStyle(primary: true, compact: true))
         }
+        .fixedSize().layoutPriority(1)      // die Knöpfe bleiben ganz, bei Platzmangel kürzen die Marken
     }
 
     /// Eine Kennzeile (wie bald, von wann bis wann), der Titel groß, Eckdaten als Marken, Knöpfe rechts.

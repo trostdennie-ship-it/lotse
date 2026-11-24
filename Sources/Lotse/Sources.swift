@@ -10,6 +10,7 @@ final class CalendarSource {
     private let store = EKEventStore()
     private var timer: Timer?
     private var alerted = Set<String>()
+    private var exact: Timer?
 
     init(model: IslandModel) { self.model = model }
 
@@ -140,18 +141,25 @@ final class CalendarSource {
             let secs = e.start.timeIntervalSince(now)
             let key5 = e.id + "-5", key0 = e.id + "-0"
             let app = e.role == .none ? "Kalender" : "Kalender · \(e.role.title)"
-            // Fünf Minuten vorher still, zum Beginn mit Ton. Der Kalender wird alle 30 Sekunden gelesen,
-            // deshalb gilt „Beginn" ab 15 Sekunden davor.
-            if secs <= 300, secs > 15, !alerted.contains(key5) {
+            // Fünf Minuten vorher still, zum Beginn mit Ton. Damit beides pünktlich kommt, weckt `exact`
+            // (unten) genau zu diesen Zeitpunkten; das Lesen alle 30 Sekunden ist nur das Netz darunter.
+            if secs <= 300, secs > 2, !alerted.contains(key5) {
                 alerted.insert(key5)
                 model.post(Notice(kind: .calendar, appID: "com.apple.iCal", appName: app, title: e.title,
                                   body: "Beginnt \(Fmt.until(e.start, now: now)) · \(Fmt.time.string(from: e.start))",
                                   url: e.joinURL, hold: 12, event: e))
-            } else if secs <= 15, secs > -120, !alerted.contains(key0) {
+            } else if secs <= 2, secs > -120, !alerted.contains(key0) {
                 alerted.insert(key0); alerted.insert(key5)
                 model.post(Notice(kind: .calendar, appID: "com.apple.iCal", appName: app, title: e.title,
                                   body: "Beginnt jetzt", url: e.joinURL, hold: 60, sound: true, event: e))
             }
+        }
+        // Nächster fälliger Zeitpunkt: fünf Minuten vor einem Termin oder sein Beginn.
+        let due = events.flatMap { [$0.start.addingTimeInterval(-300), $0.start.addingTimeInterval(-1)] }
+            .map { $0.timeIntervalSince(now) }.filter { $0 > 0.5 }.min()
+        exact?.invalidate()
+        if let due, due < 3600 {
+            exact = Timer.scheduledTimer(withTimeInterval: due + 0.2, repeats: false) { [weak self] _ in self?.reload() }
         }
     }
 

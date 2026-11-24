@@ -175,7 +175,7 @@ final class IslandController {
         // Zugeklappt zählt die berechnete Pillengröße. Die gemessene kann veraltet sein – etwa solange ein Dialog offen ist
         // und die Insel nicht neu gezeichnet wird; dann klappte sie schon weit vor der Pille auf.
         if model.mode == .compact {
-            size = CGSize(width: IslandView.compactWidth(model), height: min(size.height, max(model.topInset, 30)))
+            size = CGSize(width: IslandView.compactWidth(model), height: min(size.height, max(model.topInset + (model.hasNotch ? IslandView.chin : 0), 30)))
         }
         let rect = NSRect(x: f.midX - size.width / 2 - margin, y: f.maxY - size.height - margin,
                           width: size.width + 2 * margin, height: size.height + margin + 4)
@@ -362,9 +362,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     // Kästchen rasten einzeln auf ganze Punkte ein: scharf auch ohne Retina.
                     let x0 = (CGFloat(x) * px).rounded(), x1 = (CGFloat(x + 1) * px).rounded()
                     let y0 = (CGFloat(y) * px).rounded(), y1 = (CGFloat(y + 1) * px).rounded()
-                    // Schmaler Spalt zwischen den Kästchen wie im App-Symbol; ohne Retina nur abgedunkelt.
-                    let a: CGFloat = c == "s" || c == "h" ? 0.62 : 1
-                    if hair >= 1 { NSColor.black.withAlphaComponent(a * 0.42).setFill(); NSRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0).fill() }
+                    // Schmaler Spalt zwischen den Kästchen wie im App-Symbol.
+                    // Der Spalt ist nur abgedunkelt, nicht leer – sonst wirkt das Boot neben anderen Symbolen grau.
+                    let a: CGFloat = c == "s" || c == "h" ? 0.8 : 1
+                    NSColor.black.withAlphaComponent(a * (hair >= 1 ? 0.42 : 0.5)).setFill()
+                    NSRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0).fill()
                     NSColor.black.withAlphaComponent(a).setFill()
                     NSRect(x: x0, y: y0, width: x1 - x0 - hair, height: y1 - y0 - hair).fill()
                 }
