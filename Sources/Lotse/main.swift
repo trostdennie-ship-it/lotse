@@ -519,7 +519,7 @@ enum Demo {
             UsageLimit(label: "Woche", percent: 18, resets: now.addingTimeInterval(4.2 * 86400)),
         ]
         m.notices = [
-            Notice(kind: .system, appID: "ru.keepcoder.Telegram", appName: "Telegram", title: "Anna", body: "Kannst du heute Abend noch Brot mitbringen?", date: now.addingTimeInterval(-120)),
+            Notice(kind: .system, appID: "com.tdesktop.Telegram", appName: "Telegram", title: "Anna", body: "Kannst du heute Abend noch Brot mitbringen?", date: now.addingTimeInterval(-120)),
             Notice(kind: .system, appID: "com.apple.mail", appName: "Mail", title: "Angebot Q1", body: "Anbei die überarbeitete Fassung – bitte bis Mittwoch freigeben.", date: now.addingTimeInterval(-2400)),
         ]
         m.weather = Weather(city: "Hamburg", temperature: 8, high: 10, low: 4, symbol: "cloud.sun.fill")

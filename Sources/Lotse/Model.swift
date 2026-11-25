@@ -107,7 +107,7 @@ struct CalEvent: Identifiable {
     /// Titel mit kleinem Symbol davor (Aktentasche = Arbeit, Haus = privat).
     func marked(discreet: Bool) -> Text {
         guard let s = role.symbol else { return Text(label(discreet: discreet)) }
-        return Text("\(Text(Image(systemName: s)).font(.system(size: 8.5)).baselineOffset(1)) \(label(discreet: discreet))")
+        return Text("\(Text(Image(systemName: s)).font(.system(size: 8.5)).baselineOffset(1))\u{00A0}\(label(discreet: discreet))")
     }
 }
 

@@ -129,7 +129,7 @@ private struct OnboardingView: View {
                             Spacer(minLength: 0)
                         }
                         .padding(.horizontal, 8).padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(step == i ? Color.primary.opacity(0.10) : .clear))
+                        .background(RoundedRectangle(cornerRadius: 7).fill(step == i ? Color.primary.opacity(0.10) : .clear))
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)

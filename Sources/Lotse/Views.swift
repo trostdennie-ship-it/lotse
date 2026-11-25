@@ -1160,7 +1160,7 @@ struct TopRow: View {
         Button { withAnimation(IslandModel.spring) { model.tab = t } } label: {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(model.tab == t ? Theme.text : Color.white.opacity(0.45))
+                .foregroundStyle(model.tab == t ? Theme.text : Theme.faint)
                 .frame(width: 30, height: 26)
                 .background {
                     // Ein einziger Kreis, der zum gewählten Reiter hinübergleitet.
@@ -1179,7 +1179,7 @@ struct TopRow: View {
 
     private func tool(_ icon: String, _ name: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: icon).font(.system(size: 11, weight: .medium)).foregroundStyle(Color.white.opacity(0.5))
+            Image(systemName: icon).font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.faint)
                 .frame(width: 28, height: 26).contentShape(Rectangle())
         }
         .buttonStyle(.plain).modifier(HoverGlow()).help(name).accessibilityLabel(name)
@@ -1206,7 +1206,7 @@ struct TopRow: View {
                     Text(note.range(of: "fertig in ").map { String(note[$0.lowerBound...]) } ?? note).fixedSize()
                     Text(note)
                 }
-                .font(Theme.font(12)).foregroundStyle(Color.white.opacity(0.45)).lineLimit(1).padding(.trailing, 6)
+                .font(Theme.font(12)).foregroundStyle(Theme.faint).lineLimit(1).padding(.trailing, 6)
             }
             tool("wifi", "WLAN-Einstellungen öffnen") {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.wifi-settings-extension")!)
@@ -1353,7 +1353,7 @@ struct PeekView: View {
                     .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.accent)
                 Text(notice.title).font(Theme.font(13, .semibold)).foregroundStyle(Theme.text)
                 if !notice.body.isEmpty {
-                    Text(notice.body).font(Theme.font(13)).monospacedDigit().foregroundStyle(Color.white.opacity(0.55))
+                    Text(notice.body).font(Theme.font(13)).monospacedDigit().foregroundStyle(Theme.muted)
                         .lineLimit(1).truncationMode(.tail)
                 }
             }
@@ -1448,7 +1448,7 @@ struct CalendarPeek: View {
             HStack(spacing: 6) {
                 Circle().fill(event.color).frame(width: 7, height: 7)
                 Text((started ? "BEGINNT JETZT" : "IN \(minutes) MIN") + " · " + span)
-                    .font(Theme.font(10.5, .semibold)).tracking(0.7).monospacedDigit().foregroundStyle(Theme.accent)
+                    .font(Theme.font(10, .semibold)).tracking(0.7).monospacedDigit().foregroundStyle(Theme.accent)
             }
             Text(title).font(Theme.font(18, .semibold)).foregroundStyle(Theme.text)
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
@@ -1816,7 +1816,7 @@ struct DropHint: View {
             Text("Hier loslassen, um zu parken").font(Theme.font(13, .medium)).foregroundStyle(Theme.text)
         }
         .frame(maxWidth: .infinity).frame(height: 54)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .background(RoundedRectangle(cornerRadius: 17, style: .continuous)
             .strokeBorder(Theme.accent.opacity(0.45), style: StrokeStyle(lineWidth: 1.2, dash: [5, 4])))
         .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 16)
     }
@@ -1880,7 +1880,7 @@ struct StripMusic: View {
         StripTile {
             if let t = model.track {
                 HStack(spacing: 11) {
-                    Cover(image: t.artwork, size: 52, radius: 10)
+                    Cover(image: t.artwork, size: 52, radius: 9)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(t.title).font(Theme.font(13, .semibold)).foregroundStyle(Theme.text).lineLimit(1)
                         Text(t.artist).font(Theme.font(11)).foregroundStyle(Theme.muted).lineLimit(1)
@@ -2039,16 +2039,22 @@ struct WeekRow: View {
                 // Läuft gerade: hervorgehoben mit Endzeit. Vorbei: ausgegraut. Ganztägiges bleibt neutral.
                 let running = !e.allDay && e.start <= model.now && e.end > model.now
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(e.allDay ? "ganztägig" : running ? "jetzt · bis \(Fmt.time.string(from: e.end))" : Fmt.time.string(from: e.start))
-                        .font(Theme.font(10, running ? .semibold : .regular)).monospacedDigit()
-                        .foregroundStyle(past ? Theme.faint : Theme.accent).lineLimit(1)
-                    e.marked(discreet: model.discreet).font(Theme.font(11, running ? .semibold : .medium))
+                    // Das Rollen-Symbol steht in der Zeitzeile, damit es bei langen Titeln nicht allein umbricht.
+                    HStack(spacing: 4) {
+                        Text(e.allDay ? "ganztägig" : running ? "jetzt · bis \(Fmt.time.string(from: e.end))" : Fmt.time.string(from: e.start))
+                            .font(Theme.font(10, running ? .semibold : .regular)).monospacedDigit()
+                        if !running, let sym = e.role.symbol { Image(systemName: sym).font(.system(size: 8.5, weight: .semibold)) }
+                    }
+                    .foregroundStyle(past ? Theme.faint : Theme.accent).lineLimit(1)
+                    // Ein einzelnes langes Wort wird leicht verkleinert statt mitten im Wort umzubrechen.
+                    Text(e.label(discreet: model.discreet)).font(Theme.font(11, running ? .semibold : .medium))
+                        .minimumScaleFactor(0.8).allowsTightening(true)
                         .foregroundStyle(past ? Theme.faint : Theme.text)
                         .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, running ? 6 : 0).padding(.vertical, running ? 4 : 0)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.accent.opacity(running ? 0.18 : 0)))
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.accent.opacity(running ? 0.18 : 0)))
                 .overlay(alignment: .leading) {
                     if running { RoundedRectangle(cornerRadius: 1).fill(Theme.accent).frame(width: 2).padding(.vertical, 4) }
                 }
@@ -2084,8 +2090,9 @@ struct StripDate: View {
                         Text(when(e)).font(Theme.font(11)).monospacedDigit()
                             .foregroundStyle(e.start.timeIntervalSince(model.now) < 3600 ? Theme.accent : Theme.muted).lineLimit(1)
                         if let url = e.joinURL, e.start.timeIntervalSince(model.now) < 15 * 60 {
+                            // Erst in den letzten fünf Minuten wird er zum hellsten Knopf.
                             Button("Beitreten") { NSWorkspace.shared.open(url) }
-                                .buttonStyle(CapsuleStyle(primary: true, compact: true)).padding(.top, 3)
+                                .buttonStyle(CapsuleStyle(primary: e.start.timeIntervalSince(model.now) < 5 * 60, compact: true)).padding(.top, 3)
                         }
                     } else {
                         Text(model.calendarDenied ? "Kein Kalenderzugriff" : "Nichts geplant").font(Theme.font(12)).foregroundStyle(Theme.muted)
@@ -2517,6 +2524,15 @@ struct CalendarTile: View {
                 Text("Heute und morgen steht nichts an.").font(Theme.font(12)).foregroundStyle(Theme.muted)
             } else if compact {
                 list(d.events, lead: open.first)
+                // Ist heute wenig los, füllt der nächste Tag die Spalte, statt sie leer zu lassen.
+                let cal = Calendar.current
+                let next = cal.date(byAdding: .day, value: 1, to: d.date) ?? d.date
+                let later = model.events.filter { cal.isDate($0.start, inSameDayAs: next) }
+                if d.events.count < 5, !later.isEmpty {
+                    Text(d.label == "Heute" ? "MORGEN" : "ÜBERMORGEN").font(Theme.font(10, .semibold)).tracking(0.6)
+                        .foregroundStyle(Theme.faint).padding(.top, 6)
+                    list(Array(later.prefix(6 - d.events.count)), lead: nil)
+                }
             } else {
                 if let e = open.first { lead(e) }
                 let rest = d.events.filter { $0.id != open.first?.id }
@@ -2550,8 +2566,10 @@ struct CalendarTile: View {
             }
             Spacer()
             // Der Knopf erscheint erst, wenn der Termin wirklich ansteht – vorher lenkt er nur ab.
+            // Erst in den letzten fünf Minuten wird er zum hellsten Knopf.
             if let url = e.joinURL, e.start.timeIntervalSince(model.now) < 15 * 60 {
-                Button("Beitreten") { NSWorkspace.shared.open(url) }.buttonStyle(CapsuleStyle(primary: true, compact: true))
+                Button("Beitreten") { NSWorkspace.shared.open(url) }
+                    .buttonStyle(CapsuleStyle(primary: e.start.timeIntervalSince(model.now) < 5 * 60, compact: true))
             }
         }
     }
@@ -2588,7 +2606,7 @@ struct MusicTile: View {
     var body: some View {
         if let t = model.track {
             HStack(spacing: 11) {
-                Cover(image: t.artwork, size: 34, radius: 8)
+                Cover(image: t.artwork, size: 34, radius: 9)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(t.title).font(Theme.font(13)).foregroundStyle(Theme.text).lineLimit(1)
                     Text(t.artist).font(Theme.font(11)).foregroundStyle(Theme.faint).lineLimit(1)
@@ -2667,13 +2685,13 @@ struct NotificationsTile: View {
                             }
                             Button { model.open(n) } label: {
                                 Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.soft)
-                                    .frame(width: 28, height: 26).background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.raised))
+                                    .frame(width: 30, height: 24).background(Capsule().fill(Theme.raised))
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain).modifier(HoverGlow()).help("In \(n.appName) öffnen").accessibilityLabel("Öffnen")
                             Button { withAnimation(IslandModel.spring) { model.notices.removeAll { $0.id == n.id } } } label: {
                                 Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.soft)
-                                    .frame(width: 28, height: 26).background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.raised))
+                                    .frame(width: 30, height: 24).background(Capsule().fill(Theme.raised))
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain).modifier(HoverGlow()).help("Abhaken").accessibilityLabel("Abhaken")
@@ -2757,7 +2775,7 @@ struct ShelfView: View {
                 .lineLimit(1).truncationMode(.middle).frame(maxWidth: .infinity)
         }
         .padding(.vertical, 7).padding(.horizontal, 4)
-        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(on ? 0.10 : 0)))
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(on ? 0.10 : 0)))
         .contentShape(Rectangle())
         .onHover { inside in hovered = inside ? item.id : (hovered == item.id ? nil : hovered) }
         // Herausziehen in jede andere App; ein Doppelklick öffnet die Datei.
@@ -2815,7 +2833,7 @@ struct ClipTile: View {
                     }
                 }
                 .padding(.horizontal, 8).frame(height: 24)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.raised))
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.raised))
             }
             if !model.clipboardOn {
                 Text("Der Verlauf ist in den Einstellungen abgeschaltet.").font(Theme.font(12)).foregroundStyle(Theme.muted)
@@ -2871,7 +2889,7 @@ struct ClipTile: View {
                 }
             }
             .padding(.horizontal, 6).frame(height: 26)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(hovered == clip.id ? 0.10 : 0)))
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(hovered == clip.id ? 0.10 : 0)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -2982,7 +3000,8 @@ struct FocusTile: View {
                     }
                     .frame(height: 3)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Uhr, Balken und Knöpfe bilden einen Block in der Mitte statt oben und unten zu kleben.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             }
             HStack(spacing: 7) {
                 if model.focusRunning || model.focusPaused != nil {
@@ -3000,6 +3019,8 @@ struct FocusTile: View {
                 }
             }
             .frame(maxWidth: .infinity)
+            .padding(.top, 4)
+            Spacer(minLength: 0)
         }
     }
 }
@@ -3066,8 +3087,8 @@ struct StowView: View {
                         else { Theme.raised }
                     }
                     .frame(width: 76, height: 76)
-                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
                     .rotationEffect(.degrees(Double(i) * -5))
                     .offset(x: CGFloat(i) * -5, y: CGFloat(i) * -3)
                 }
@@ -3151,6 +3172,8 @@ struct LevelSlider: View {
 struct VolumeDial: View {
     var value: Double
     var muted: Bool
+    var enabled = true
+    var onChange: (Double) -> Void = { _ in }
 
     var body: some View {
         ZStack {
@@ -3177,8 +3200,22 @@ struct VolumeDial: View {
             }
         }
         .frame(width: 104, height: 104)
+        .contentShape(Circle())
+        // Am Strichkranz drehen: oben ist 0, im Uhrzeigersinn bis 100.
+        .gesture(DragGesture(minimumDistance: 0).onChanged { d in
+            guard enabled else { return }
+            let a = atan2(Double(d.location.x - 52), Double(52 - d.location.y))
+            var v = (a < 0 ? a + 2 * Double.pi : a) / (2 * Double.pi)
+            if value < 0.15 && v > 0.85 { v = 0 } else if value > 0.85 && v < 0.15 { v = 1 }  // nicht über die Null springen
+            onChange(min(1, max(0, v)))
+        })
+        .help(enabled ? "Am Kranz drehen, um die Lautstärke zu ändern" : "")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(muted ? "Ton aus" : "Gesamtlautstärke \(Int((value * 100).rounded())) Prozent")
+        .accessibilityAdjustableAction { dir in
+            guard enabled else { return }
+            onChange(min(1, max(0, value + (dir == .increment ? 0.05 : -0.05))))
+        }
     }
 }
 
@@ -3188,18 +3225,19 @@ struct MixerView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             // Links: die Gesamtlautstärke
-            VStack(spacing: 10) {
-                VolumeDial(value: model.volume, muted: model.muted)
-                LevelSlider(value: model.muted ? 0 : model.volume, enabled: model.volumeAdjustable) { model.setVolume?($0) }
-                    .frame(width: 118)
+            // Die Scheibe selbst ist der Regler, ein zweiter Schieber wäre doppelt.
+            VStack(spacing: 14) {
+                Spacer(minLength: 0)
+                VolumeDial(value: model.volume, muted: model.muted, enabled: model.volumeAdjustable) { model.setVolume?($0) }
                 Button { model.setMuted?(!model.muted) } label: {
                     Image(systemName: model.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                 }
                 .buttonStyle(RoundStyle(primary: model.muted, size: 28))
                 .help(model.muted ? "Ton einschalten" : "Ton ausschalten")
                 .accessibilityLabel(model.muted ? "Ton einschalten" : "Ton ausschalten")
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 14).padding(.vertical, 14)
+            .padding(.horizontal, 18).padding(.vertical, 14)
             .frame(maxHeight: .infinity)
             .modifier(GlassPiece(shape: RoundedRectangle(cornerRadius: 17, style: .continuous)))
             .modifier(Rise(index: 0))
@@ -3240,7 +3278,7 @@ struct MixerView: View {
     /// Was gerade läuft – mit Cover und Steuerung.
     private func playing(_ t: Track) -> some View {
         HStack(spacing: 11) {
-            Cover(image: t.artwork, size: 40, radius: 8)
+            Cover(image: t.artwork, size: 40, radius: 9)
             VStack(alignment: .leading, spacing: 1) {
                 Text(t.title).font(Theme.font(13, .semibold)).foregroundStyle(Theme.text).lineLimit(1)
                 Text(t.artist).font(Theme.font(11)).foregroundStyle(Theme.muted).lineLimit(1)
@@ -3253,7 +3291,7 @@ struct MixerView: View {
             }
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.raised))
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.raised))
     }
 
     private func control(_ icon: String, _ command: String, _ name: String, big: Bool = false) -> some View {
@@ -3305,12 +3343,15 @@ struct MixerView: View {
             Text(app.name).font(Theme.font(12)).foregroundStyle(Theme.text).lineLimit(1).frame(width: 104, alignment: .leading)
             if app.scriptable, let level = app.level {
                 LevelSlider(value: level) { model.setAppLevel?(app.id, $0) }
-                Text("\(Int((level * 100).rounded())) %").font(Theme.mono(11)).foregroundStyle(Theme.soft)
+                Text("\(Int((level * 100).rounded())) %").font(Theme.font(11)).monospacedDigit().foregroundStyle(Theme.soft)
                     .frame(width: 40, alignment: .trailing)
             } else {
                 // Ohne eigenen Regler: Lotse zeigt die App, kann sie aber (noch) nicht einzeln leiser machen.
                 LevelSlider(value: 1, enabled: false) { _ in }
-                Text("fest").font(Theme.mono(11)).foregroundStyle(Theme.faint).frame(width: 40, alignment: .trailing)
+                Image(systemName: "lock.fill").font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.faint)
+                    .frame(width: 40, alignment: .trailing)
+                    .help("\(app.name) lässt sich nicht einzeln regeln und folgt der Gesamtlautstärke")
+                    .accessibilityLabel("folgt der Gesamtlautstärke")
             }
         }
         .accessibilityElement(children: .combine)
