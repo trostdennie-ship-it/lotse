@@ -27,7 +27,9 @@ struct Notice: Identifiable {
     /// Der Termin hinter einer Erinnerung – daraus baut die Insel die Terminkarte.
     var event: CalEvent? = nil
     /// Kleine Meldung ohne Knöpfe (Pille oder Geräte-Karte).
-    var small: Bool { brief || (card != nil && card != "away") }
+    var small: Bool { brief || (card != nil && !bigCard) }
+    /// Große Karten mit eigenen Knöpfen („Während du weg warst", „Losgehen").
+    var bigCard: Bool { card == "away" || card == "leave" || card == "leave-ask" }
 }
 
 extension Notice.Kind {
@@ -211,7 +213,7 @@ final class IslandModel: ObservableObject {
             // Nach dem Zuklappen eine wartende Termin-Erinnerung nachreichen (höchstens drei Minuten alt).
             guard mode == .compact, oldValue == .expanded, let w = waitingPeek else { return }
             waitingPeek = nil
-            guard Date().timeIntervalSince(w.since) < (w.notice.card == "away" ? 1800 : 180) else { return }
+            guard Date().timeIntervalSince(w.since) < (w.notice.bigCard ? 1800 : 180) else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.post(w.notice) }
         }
     }
@@ -421,6 +423,17 @@ final class IslandModel: ObservableObject {
     /// „Während du weg warst": die Bilanz der letzten Pause, bis sie als gesehen markiert ist.
     @Published var away: AwaySummary?
     var awayLater: (() -> Void)?
+    /// „Losgehen": die Karte zum nächsten Aufbruch, die Erlaubnis-Karte und die Termine, deren 5-Minuten-Erinnerung entfällt.
+    @Published var leave: LeaveCard?
+    @Published var leaveOn: Bool = UserDefaults.standard.object(forKey: "leaveOn") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(leaveOn, forKey: "leaveOn") }
+    }
+    @Published var locationDenied = false
+    var leaveSuppressed = Set<String>()
+    var leaveLater: (() -> Void)?
+    var leavePick: ((TravelMode) -> Void)?
+    var leaveAllow: (() -> Void)?
+    var leaveNotNow: (() -> Void)?
     var showAway: ((Date) -> Void)?
     var releaseKeyboard: (() -> Void)?
 
@@ -506,7 +519,7 @@ final class IslandModel: ObservableObject {
         // Eine offene Freigabe im Kurz-Hinweis wird von anderen Hinweisen nicht verdrängt.
         if mode == .peek, peekAsk != nil, !urgent { return }
         // Ist die Insel gerade offen, geht eine Termin-Erinnerung nicht verloren: Sie erscheint, sobald die Insel zuklappt.
-        if peek, mode == .expanded, notice.kind == .calendar || notice.card == "away" { waitingPeek = (notice, Date()); return }
+        if peek, mode == .expanded, notice.kind == .calendar || notice.bigCard { waitingPeek = (notice, Date()); return }
         guard peek, mode == .compact || mode == .peek else { return }
         peekWork?.cancel()
         var shown = notice

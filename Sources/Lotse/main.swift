@@ -333,7 +333,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let away = AwayWatcher(model: model)
         away.start()
         model.showAway = { [weak away] since in away?.show(since: since) }
-        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe, away]
+        let leave = LeaveWatcher(model: model)
+        leave.start()
+        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe, away, leave]
         snap.start()
         setupMenu()
         log("Lotse gestartet")

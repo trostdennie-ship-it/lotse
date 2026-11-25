@@ -158,6 +158,8 @@ final class CalendarSource {
             let app = e.role == .none ? "Kalender" : "Kalender · \(e.role.title)"
             // Fünf Minuten vorher still, zum Beginn mit Ton. Damit beides pünktlich kommt, weckt `exact`
             // (unten) genau zu diesen Zeitpunkten; das Lesen alle 30 Sekunden ist nur das Netz darunter.
+            // Hat der Termin eine Losgehen-Karte, entfällt die Erinnerung fünf Minuten vorher; die zum Beginn bleibt.
+            if secs <= 300, secs > 2, model.leaveSuppressed.contains(e.id) { alerted.insert(key5) }
             if secs <= 300, secs > 2, !alerted.contains(key5) {
                 alerted.insert(key5)
                 model.post(Notice(kind: .calendar, appID: "com.apple.iCal", appName: app, title: e.title,

@@ -1,5 +1,8 @@
 import AppKit
 import SwiftUI
+import MapKit
+import CoreLocation
+import Combine
 
 // MARK: - „Losgehen": rechtzeitig zum Aufbruch erinnern
 
@@ -26,6 +29,13 @@ struct LeavePlan: Equatable {
     var times: [TravelMode: TimeInterval]
     var meters: Double
     var mode: TravelMode
+}
+
+/// Was die Losgehen-Karte zeigt.
+struct LeaveCard {
+    var event: CalEvent
+    var plan: LeavePlan
+    var place: LeavePlace
 }
 
 enum Leave {
@@ -161,5 +171,241 @@ extension Leave {
         check(askDue(now: now, lastAsked: yesterday, denied: false, onboarded: true, hasCandidate: true), "gestern gefragt → wieder")
         check(askDue(now: now, lastAsked: nil, denied: false, onboarded: true, hasCandidate: true), "nie gefragt → fragen")
         return bad
+    }
+}
+
+// MARK: - Wächter: Standort, Fahrzeiten, Zeitpunkt der Karte
+
+final class LeaveWatcher: NSObject, CLLocationManagerDelegate {
+    private let model: IslandModel
+    private let manager = CLLocationManager()
+    private var location: CLLocation?
+    private var locatedAt: Date?
+    private var locating = false
+    /// Ortstext → aufgelöster Ort (nil = kein echter Ort; Fehlschläge werden auch gemerkt).
+    private var places: [String: LeavePlace?] = [:]
+    private var resolving = Set<String>()
+    private var plans: [String: LeavePlan] = [:]
+    private var distances: [String: [TravelMode: Double]] = [:]
+    private var asked: [String: Date] = [:]
+    private var shown = Set<String>()
+    /// „Später": Termin-ID → Zeitpunkt, zu dem die Karte noch einmal kommt.
+    private var again: [String: Date] = [:]
+    private var timer: Timer?
+    private var exact: Timer?
+    private var bag: AnyCancellable?
+
+    init(model: IslandModel) { self.model = model }
+
+    private var chosenMode: TravelMode {
+        TravelMode(rawValue: UserDefaults.standard.string(forKey: "leaveMode") ?? "") ?? .driving
+    }
+
+    private var authorized: Bool {
+        let s = manager.authorizationStatus
+        return s == .authorizedAlways || s == .authorized
+    }
+
+    func start() {
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        model.locationDenied = manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted
+        timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.tick() }
+        bag = model.$events.dropFirst().debounce(for: .seconds(1), scheduler: RunLoop.main).sink { [weak self] _ in self?.tick() }
+        model.leaveLater = { [weak self] in self?.later() }
+        model.leavePick = { [weak self] m in self?.pick(m) }
+        model.leaveAllow = { [weak self] in
+            guard let self else { return }
+            self.model.dismissPeek()
+            log("Losgehen: Standort angefragt")
+            self.manager.requestWhenInUseAuthorization()
+        }
+        model.leaveNotNow = { [weak self] in self?.model.dismissPeek() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.tick() }
+    }
+
+    func tick() {
+        let now = Date()
+        guard model.leaveOn else { forget(); return }
+        let cands = model.events.filter { Leave.isCandidate($0, now: now) }
+        let ids = Set(cands.map(\.id))
+        // Termine, die keine mehr sind (verschoben, gelöscht, begonnen), vergessen.
+        plans = plans.filter { ids.contains($0.key) }
+        again = again.filter { ids.contains($0.key) }
+        model.leaveSuppressed = model.leaveSuppressed.intersection(ids)
+        if let c = model.leave, !ids.contains(c.event.id) { model.leave = nil }
+        guard !cands.isEmpty else { exact?.invalidate(); return }
+
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            let last = UserDefaults.standard.object(forKey: "leaveAskedAt") as? Date
+            if Leave.askDue(now: now, lastAsked: last, denied: false, onboarded: OnboardingWindow.done, hasCandidate: true) {
+                UserDefaults.standard.set(now, forKey: "leaveAskedAt")
+                log("Losgehen: frage nach dem Standort")
+                model.post(Notice(kind: .info, appName: "Losgehen", title: "Standort für „Losgehen“", body: "", card: "leave-ask", hold: 60))
+            }
+            return
+        case .denied, .restricted:
+            model.locationDenied = true; return
+        default: break
+        }
+        model.locationDenied = false
+        guard authorized else { return }
+        if location == nil || now.timeIntervalSince(locatedAt ?? .distantPast) > 600 {
+            if !locating { locating = true; manager.requestLocation() }
+            if location == nil { return }
+        }
+        for e in cands {
+            let key = e.place.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let resolved = places[key] else { resolve(key); continue }
+            guard let place = resolved else { continue }
+            if now.timeIntervalSince(asked[e.id] ?? .distantPast) > 600 { route(e, place) }
+        }
+        evaluate()
+    }
+
+    // MARK: Ort und Fahrzeiten
+
+    private func resolve(_ text: String) {
+        guard !resolving.contains(text) else { return }
+        resolving.insert(text)
+        let req = MKLocalSearch.Request()
+        req.naturalLanguageQuery = text
+        if let l = location { req.region = MKCoordinateRegion(center: l.coordinate, latitudinalMeters: 200_000, longitudinalMeters: 200_000) }
+        MKLocalSearch(request: req).start { [weak self] resp, _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.resolving.remove(text)
+                guard let item = resp?.mapItems.first else { self.places[text] = .some(nil); return }
+                let pm = item.placemark
+                let meters = self.location.map { $0.distance(from: CLLocation(latitude: pm.coordinate.latitude, longitude: pm.coordinate.longitude)) } ?? .infinity
+                let place = LeavePlace(address: text,
+                                       short: pm.subLocality ?? pm.locality ?? item.name ?? "",
+                                       hasStreet: pm.thoroughfare != nil,
+                                       isPOI: item.pointOfInterestCategory != nil,
+                                       metersAway: meters)
+                self.coords[text] = pm.coordinate
+                self.places[text] = Leave.isRealPlace(place) ? .some(place) : .some(nil)
+                self.tick()
+            }
+        }
+    }
+
+    private func route(_ e: CalEvent, _ place: LeavePlace) {
+        guard let here = location, let to = placeCoordinate(place) else { return }
+        asked[e.id] = Date()
+        let dest = MKMapItem(placemark: MKPlacemark(coordinate: to))
+        let from = MKMapItem(placemark: MKPlacemark(coordinate: here.coordinate))
+        var times: [TravelMode: TimeInterval] = [:], meters: [TravelMode: Double] = [:]
+        let group = DispatchGroup()
+        for mode in TravelMode.allCases {
+            let r = MKDirections.Request()
+            r.source = from; r.destination = dest; r.arrivalDate = e.start
+            r.transportType = mode == .driving ? .automobile : mode == .transit ? .transit : .walking
+            group.enter()
+            MKDirections(request: r).calculateETA { resp, _ in
+                DispatchQueue.main.async {
+                    if let resp, resp.expectedTravelTime > 0 { times[mode] = resp.expectedTravelTime; meters[mode] = resp.distance }
+                    group.leave()
+                }
+            }
+        }
+        group.notify(queue: .main) { [weak self] in self?.planned(e, place, times, meters) }
+    }
+
+    /// Koordinate des Ziels (aus dem Zwischenspeicher der Suche).
+    private var coords: [String: CLLocationCoordinate2D] = [:]
+    private func placeCoordinate(_ p: LeavePlace) -> CLLocationCoordinate2D? { coords[p.address] }
+
+    private func planned(_ e: CalEvent, _ place: LeavePlace, _ times: [TravelMode: TimeInterval], _ meters: [TravelMode: Double]) {
+        let mode = times[chosenMode] != nil ? chosenMode : TravelMode.allCases.first { times[$0] != nil }
+        guard let mode, let travel = times[mode], travel <= Leave.horizon,
+              !Leave.tooClose(meters: place.metersAway, travel: travel) else {
+            plans[e.id] = nil; model.leaveSuppressed.remove(e.id); return
+        }
+        let plan = LeavePlan(eventID: e.id, leaveAt: Leave.leaveAt(start: e.start, travel: travel), times: times,
+                             meters: meters[mode] ?? place.metersAway, mode: mode)
+        distances[e.id] = meters
+        if plans[e.id] == nil {
+            log("Losgehen: Termin in \(Int(e.start.timeIntervalSinceNow / 60)) Min, Fahrzeit \(Int(travel / 60)) Min")
+        }
+        plans[e.id] = plan
+        model.leaveSuppressed.insert(e.id)
+        if model.leave?.event.id == e.id { model.leave = LeaveCard(event: e, plan: plan, place: place) }
+        evaluate()
+    }
+
+    // MARK: Karte zeigen
+
+    private func evaluate() {
+        let now = Date()
+        for (id, plan) in plans {
+            guard let e = model.events.first(where: { $0.id == id }),
+                  let place = places[e.place.trimmingCharacters(in: .whitespacesAndNewlines)] ?? nil else { continue }
+            let due = again[id].map { now >= $0 && now < e.start } ?? false
+            if due || Leave.shouldShow(plan, start: e.start, now: now, shown: shown.contains(id)) {
+                again[id] = nil
+                shown.insert(id)
+                show(e, plan, place)
+            }
+        }
+        schedule()
+    }
+
+    private func show(_ e: CalEvent, _ plan: LeavePlan, _ place: LeavePlace) {
+        model.leave = LeaveCard(event: e, plan: plan, place: place)
+        log("Losgehen: Karte für Termin in \(Int(e.start.timeIntervalSinceNow / 60)) Min")
+        model.post(Notice(kind: .info, appName: "Losgehen", title: e.title, body: "", card: "leave", hold: 120))
+    }
+
+    /// Weckt genau dann, wenn die nächste Karte fällig ist.
+    private func schedule() {
+        let now = Date()
+        let times = plans.values.filter { !shown.contains($0.eventID) }.map(Leave.cardAt) + Array(again.values)
+        exact?.invalidate()
+        guard let next = times.filter({ $0 > now }).min(), next.timeIntervalSince(now) < 3 * 3600 else { return }
+        exact = Timer.scheduledTimer(withTimeInterval: next.timeIntervalSince(now) + 0.3, repeats: false) { [weak self] _ in self?.evaluate() }
+    }
+
+    private func later() {
+        model.dismissPeek()
+        guard let c = model.leave else { return }
+        if Date() < c.plan.leaveAt { again[c.event.id] = c.plan.leaveAt; schedule() }
+    }
+
+    private func pick(_ mode: TravelMode) {
+        UserDefaults.standard.set(mode.rawValue, forKey: "leaveMode")
+        guard var c = model.leave, let travel = c.plan.times[mode] else { return }
+        c.plan.mode = mode
+        c.plan.leaveAt = Leave.leaveAt(start: c.event.start, travel: travel)
+        c.plan.meters = distances[c.event.id]?[mode] ?? c.plan.meters
+        plans[c.event.id] = c.plan
+        model.leave = c
+        schedule()
+    }
+
+    private func forget() {
+        plans = [:]; again = [:]; model.leaveSuppressed = []; exact?.invalidate()
+    }
+
+    // MARK: CLLocationManagerDelegate
+
+    func locationManagerDidChangeAuthorization(_ m: CLLocationManager) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.model.locationDenied = m.authorizationStatus == .denied || m.authorizationStatus == .restricted
+            if self.authorized { log("Losgehen: Standort erlaubt"); self.tick() }
+        }
+    }
+
+    func locationManager(_ m: CLLocationManager, didUpdateLocations locs: [CLLocation]) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let l = locs.last else { return }
+            self.locating = false; self.location = l; self.locatedAt = Date(); self.tick()
+        }
+    }
+
+    func locationManager(_ m: CLLocationManager, didFailWithError error: Error) {
+        DispatchQueue.main.async { [weak self] in self?.locating = false }
     }
 }

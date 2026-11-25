@@ -35,6 +35,8 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <key>NSCalendarsFullAccessUsageDescription</key><string>Lotse zeigt deinen nächsten Termin in der Insel.</string>
     <key>NSMicrophoneUsageDescription</key><string>Lotse nimmt beim Mitschnitt eines Calls auch deine Stimme auf.</string>
     <key>NSSpeechRecognitionUsageDescription</key><string>Lotse schreibt deine Mitschnitte auf diesem Mac mit.</string>
+    <key>NSLocationUsageDescription</key><string>Lotse rechnet aus, wann du zu einem Termin losgehen musst.</string>
+    <key>NSLocationWhenInUseUsageDescription</key><string>Lotse rechnet aus, wann du zu einem Termin losgehen musst.</string>
     <key>NSAppleEventsUsageDescription</key><string>Lotse zeigt und steuert die Musik in Spotify.</string>
 </dict>
 </plist>

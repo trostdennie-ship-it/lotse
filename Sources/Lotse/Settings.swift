@@ -125,6 +125,13 @@ private struct GeneralPane: View {
                 Text("Mitgeschrieben wird auf diesem Mac; der Ton verlässt ihn nicht. Beim ersten Mal lädt macOS einmalig das Sprachmodell von Apple.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Losgehen") {
+                Toggle("Rechtzeitig zum Aufbruch erinnern", isOn: $model.leaveOn)
+                Text(model.locationDenied
+                     ? "Standort ist für Lotse ausgeschaltet – in Systemeinstellungen → Datenschutz & Sicherheit → Ortungsdienste einschalten."
+                     : "Bei Terminen mit Adresse rechnet Lotse mit Apple Karten die Fahrzeit aus und meldet sich fünf Minuten vor dem Losgehen. Die Route öffnet Google Maps.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Zwischenablage") {
                 Toggle("Verlauf der Zwischenablage führen", isOn: $model.clipboardOn)
                 Text("Lotse merkt sich die letzten 40 kopierten Texte, Bilder und Dateien – nur im Arbeitsspeicher, nach dem Beenden sind sie weg. Als vertraulich markierte Inhalte aus Passwort-Managern werden übersprungen.")
