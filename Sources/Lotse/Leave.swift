@@ -409,3 +409,89 @@ final class LeaveWatcher: NSObject, CLLocationManagerDelegate {
         DispatchQueue.main.async { [weak self] in self?.locating = false }
     }
 }
+
+// MARK: - Die Karten
+
+struct LeaveView: View {
+    @ObservedObject var model: IslandModel
+    let card: LeaveCard
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 15)) { ctx in
+            let now = FilmState.active ? model.now : ctx.date
+            let late = now >= card.plan.leaveAt
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 7) {
+                    Circle().fill(Theme.accent).frame(width: 6, height: 6)
+                    Text(Leave.headline(leaveAt: card.plan.leaveAt, start: card.event.start, end: card.event.end, now: now))
+                        .font(Theme.font(10, .semibold)).tracking(0.7).monospacedDigit().foregroundStyle(Theme.accent)
+                }
+                Text(card.event.label(discreet: model.discreet)).font(Theme.font(18, .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                HStack(spacing: 8) {
+                    ForEach(TravelMode.allCases.filter { card.plan.times[$0] != nil }, id: \.self) { m in
+                        Button { model.leavePick?(m) } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: m.symbol).font(.system(size: 11, weight: .semibold))
+                                Text(Leave.duration(card.plan.times[m] ?? 0)).monospacedDigit()
+                            }
+                        }
+                        .buttonStyle(CapsuleStyle(primary: m == card.plan.mode, compact: true))
+                        .help("Mit \(m.title) – als Verkehrsmittel wählen")
+                        .accessibilityLabel("\(m.title), \(Leave.duration(card.plan.times[m] ?? 0))")
+                    }
+                }
+                HStack(spacing: 8) {
+                    Image(systemName: "mappin.and.ellipse").font(.system(size: 11)).foregroundStyle(Theme.faint)
+                    Text([card.place.short, Leave.distance(card.plan.meters)].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(Theme.font(12)).foregroundStyle(Theme.muted).lineLimit(1)
+                    Spacer(minLength: 8)
+                    Button("Später") { model.leaveLater?() }.buttonStyle(CapsuleStyle(compact: true))
+                        .help(late ? "Karte schließen" : "Zur Losgehzeit noch einmal erinnern")
+                    Button("Route in Google Maps") {
+                        if let u = Leave.mapsURL(address: card.place.address, mode: card.plan.mode) { NSWorkspace.shared.open(u) }
+                        model.dismissPeek()
+                    }
+                    .buttonStyle(CapsuleStyle(primary: true, compact: true))
+                }
+            }
+            .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 16)
+        }
+    }
+}
+
+struct LeaveAskView: View {
+    @ObservedObject var model: IslandModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 7) {
+                Circle().fill(Theme.accent).frame(width: 6, height: 6)
+                Text("LOSGEHEN").font(Theme.font(10, .semibold)).tracking(0.7).foregroundStyle(Theme.accent)
+            }
+            Text("Für „Losgehen“ braucht Lotse deinen Standort").font(Theme.font(16, .semibold)).foregroundStyle(Theme.text)
+            HStack(alignment: .bottom, spacing: 8) {
+                Text("Damit rechnet Lotse aus, wann du zu Terminen mit Adresse los musst. Der Standort geht nur an Apple Karten.")
+                    .font(Theme.font(12)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                Button("Nicht jetzt") { model.leaveNotNow?() }.buttonStyle(CapsuleStyle(compact: true))
+                Button("Erlauben") { model.leaveAllow?() }.buttonStyle(CapsuleStyle(primary: true, compact: true))
+            }
+        }
+        .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 16)
+    }
+}
+
+extension LeaveCard {
+    /// Erfundene Daten für Probebilder und Vorführung.
+    static func demo(now: Date, minutesToLeave: Double) -> LeaveCard {
+        let leave = now.addingTimeInterval(minutesToLeave * 60)
+        let drive: TimeInterval = 25 * 60
+        let start = leave.addingTimeInterval(drive)
+        let e = CalEvent(id: "leave-demo", title: "Kundentermin", start: start, end: start.addingTimeInterval(3600),
+                         color: .blue, place: "Musterstraße 1, 20357 Hamburg")
+        let plan = LeavePlan(eventID: e.id, leaveAt: leave, times: [.driving: drive, .transit: 31 * 60, .walking: 88 * 60],
+                             meters: 7400, mode: .driving)
+        return LeaveCard(event: e, plan: plan,
+                         place: LeavePlace(address: e.place, short: "Schanzenviertel", hasStreet: true, isPOI: false, metersAway: 6100))
+    }
+}

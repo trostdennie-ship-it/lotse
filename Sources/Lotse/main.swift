@@ -602,6 +602,13 @@ enum Demo {
             m.away = AwaySummary.collect(m, since: now.addingTimeInterval(-8.5 * 3600))
             m.peekNotice = Notice(kind: .info, appName: "Willkommen zurück", title: "Willkommen zurück", body: "", card: "away", hold: 45)
             m.mode = .peek; tall = true
+        case "leave", "leave-late":
+            m.leave = LeaveCard.demo(now: now, minutesToLeave: mode == "leave" ? 5 : -7)
+            m.peekNotice = Notice(kind: .info, appName: "Losgehen", title: "Kundentermin", body: "", card: "leave", hold: 120)
+            m.mode = .peek; tall = true
+        case "leave-ask":
+            m.peekNotice = Notice(kind: .info, appName: "Losgehen", title: "Standort für „Losgehen“", body: "", card: "leave-ask", hold: 60)
+            m.mode = .peek; tall = true
         case "peek-system": m.peekNotice = m.notices[0]; m.mode = .peek
         case "peek-cal", "peek-cal-long":
             let long = mode == "peek-cal-long"

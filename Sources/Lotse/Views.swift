@@ -712,7 +712,7 @@ struct IslandView: View {
         do {
             if model.peekAsk != nil { return max(560, wings) }
             // Kurze Bestätigungen bleiben eine schmale Pille; alles andere wird eine Karte.
-            if let n = model.peekNotice, n.card == "away" { return max(540, wings) }
+            if let n = model.peekNotice, n.bigCard { return max(540, wings) }
             if let n = model.peekNotice, let c = n.card { return max(c == "mail" ? 430 : 344, compactWidth) }
             if let n = model.peekNotice, n.brief {
                 let font = NSFont(name: "Geist-Medium", size: 13) ?? NSFont.systemFont(ofSize: 12, weight: .semibold)
@@ -1355,6 +1355,10 @@ struct PeekView: View {
     var body: some View {
         if notice.card == "away", let a = model.away {
             AwayView(model: model, summary: a)
+        } else if notice.card == "leave", let c = model.leave {
+            LeaveView(model: model, card: c)
+        } else if notice.card == "leave-ask" {
+            LeaveAskView(model: model)
         } else if let card = notice.card {
             // Ein Klick auf die Karte öffnet, worum es geht (z. B. die Mail-App).
             Button { model.open(notice); model.dismissPeek() } label: {

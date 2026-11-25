@@ -322,6 +322,11 @@ final class ClaudeSource {
         // Beispiel-Hinweise zum Ansehen (ausgelöst über eine Datei im Ereignis-Ordner).
         if j["hook_event_name"] as? String == "LotseTour" { model.runTour(); return }
         if j["hook_event_name"] as? String == "LotseFleet" { model.runFleet(); return }
+        if j["hook_event_name"] as? String == "LotseLeave" {
+            // Vorführung „Losgehen" mit erfundenem Termin; `minutes` = Minuten bis zum Losgehen (negativ = spät).
+            model.leave = LeaveCard.demo(now: Date(), minutesToLeave: j["minutes"] as? Double ?? 5)
+            model.post(Notice(kind: .info, appName: "Losgehen", title: "Kundentermin", body: "", card: "leave", hold: 120)); return
+        }
         if j["hook_event_name"] as? String == "LotseAway" {
             model.showAway?(Date().addingTimeInterval(-60 * (j["minutes"] as? Double ?? 180))); return
         }
