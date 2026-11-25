@@ -15,6 +15,7 @@ cp .build/release/Lotse "$APP/Contents/MacOS/Lotse"
 mkdir -p "$APP/Contents/Resources"
 [ -f Resources/Lotse.icns ] && cp Resources/Lotse.icns "$APP/Contents/Resources/Lotse.icns"
 [ -f Resources/Termin.wav ] && cp Resources/Termin.wav "$APP/Contents/Resources/Termin.wav"
+[ -f Resources/Geist.woff2 ] && cp Resources/Geist.woff2 Resources/Geist-OFL.txt "$APP/Contents/Resources/"
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

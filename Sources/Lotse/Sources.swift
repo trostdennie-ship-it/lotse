@@ -108,6 +108,17 @@ final class CalendarSource {
                 .compactMap { $0.title?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
         }
         model.hiddenEventTitles = titles(hiddenCals).subtracting(titles(chosen))
+        // Mitteilungen, die vor dem ersten Laden des Kalenders eingelesen wurden (z. B. beim Start), nachträglich aussortieren.
+        let hidden = model.hiddenEventTitles
+        if !hidden.isEmpty {
+            func isHidden(_ n: Notice) -> Bool {
+                n.appID?.lowercased() == "com.apple.ical"
+                    && [n.title, n.body].contains { hidden.contains($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            }
+            let gone = model.notices.filter(isHidden).count
+            if gone > 0 { model.notices.removeAll(where: isHidden); log("Kalender: \(gone) Mitteilung(en) aus ausgeblendeten Kalendern aussortiert") }
+            if let p = model.peekNotice, isHidden(p) { model.dismissPeek() }
+        }
         // Für Einladungen: Sie gelten nur, wenn der Termin in einem angezeigten Kalender steht (auch weiter voraus).
         let far = cal.date(byAdding: .day, value: 120, to: cal.startOfDay(for: now))!
         model.shownEventTitles = chosen.isEmpty ? [] : Set(store.events(matching: store.predicateForEvents(withStart: from, end: far, calendars: chosen))

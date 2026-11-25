@@ -23,7 +23,19 @@ enum Theme {
 
     /// Exakt die Schrift der Menüleiste („Datei, Bearbeiten …“): Systemschrift, 13 pt, normal.
     static let bar = Font(NSFont.menuBarFont(ofSize: 0))
-    static func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: size, weight: weight) }
+    /// Schrift der Insel: Geist (OFL, liegt im App-Paket). Fehlt sie, bleibt es bei der Systemschrift.
+    /// Die Flügel neben der Notch nutzen bewusst die Menüleistenschrift (`bar`, `system`).
+    static func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        geistLoaded ? Font.custom("Geist", size: size).weight(weight) : system(size, weight)
+    }
+    static func system(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: size, weight: weight) }
+    private static let geistLoaded: Bool = {
+        let url = Bundle.main.url(forResource: "Geist", withExtension: "woff2")
+            ?? URL(fileURLWithPath: "Resources/Geist.woff2")   // Probebilder aus .build heraus
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        return NSFont(name: "Geist", size: 12) != nil || NSFontManager.shared.availableMembers(ofFontFamily: "Geist") != nil
+    }()
     static func mono(_ size: CGFloat) -> Font { .system(size: size, weight: .regular, design: .monospaced) }
 }
 
@@ -702,7 +714,7 @@ struct IslandView: View {
             // Kurze Bestätigungen bleiben eine schmale Pille; alles andere wird eine Karte.
             if let n = model.peekNotice, let c = n.card { return max(c == "mail" ? 430 : 344, compactWidth) }
             if let n = model.peekNotice, n.brief {
-                let font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+                let font = NSFont(name: "Geist-Medium", size: 13) ?? NSFont.systemFont(ofSize: 12, weight: .semibold)
                 let w = ((n.title + "  " + n.body) as NSString).size(withAttributes: [.font: font]).width
                 // Die Pille behält die Breite der Kopfzeile: Der Notch bekommt nur ein „Kinn".
                 return max(min(ceil(w) + 84, 470), compactWidth)
@@ -1206,7 +1218,7 @@ struct TopRow: View {
                     Text(note.range(of: "fertig in ").map { String(note[$0.lowerBound...]) } ?? note).fixedSize()
                     Text(note)
                 }
-                .font(Theme.font(12)).foregroundStyle(Theme.faint).lineLimit(1).padding(.trailing, 6)
+                .font(Theme.system(12)).foregroundStyle(Theme.faint).lineLimit(1).padding(.trailing, 6)
             }
             tool("wifi", "WLAN-Einstellungen öffnen") {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.wifi-settings-extension")!)
@@ -1228,7 +1240,7 @@ struct TopRow: View {
                 .accessibilityLabel("Besprechungsmodus aktiv")
         } else if model.unread > 0, model.mode == .compact {
             Text("\(min(model.unread, 99))")
-                .font(Theme.font(11, .semibold)).monospacedDigit().foregroundStyle(Theme.onIce)
+                .font(Theme.system(11, .semibold)).monospacedDigit().foregroundStyle(Theme.onIce)
                 .padding(.horizontal, 5).frame(minWidth: 17, minHeight: 17)
                 .background(Capsule().fill(Theme.ice))
         } else if model.focusRunning, model.mode == .compact {
@@ -1911,7 +1923,7 @@ struct StripWeather: View {
             if let w = model.weather {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .top) {
-                        Text("\(w.temperature)°").font(.system(size: 30, weight: .light)).foregroundStyle(Theme.text)
+                        Text("\(w.temperature)°").font(Theme.font(30, .light)).foregroundStyle(Theme.text)
                         Spacer()
                         Image(systemName: w.symbol).symbolRenderingMode(.multicolor).font(.system(size: 22))
                     }
@@ -2082,7 +2094,7 @@ struct StripDate: View {
                     Text(Self.weekday.string(from: model.now).uppercased().replacingOccurrences(of: ".", with: ""))
                         .font(Theme.font(11, .medium)).foregroundStyle(Theme.muted)
                     Text("\(Calendar.current.component(.day, from: model.now))")
-                        .font(.system(size: 30, weight: .light)).monospacedDigit().foregroundStyle(Theme.text)
+                        .font(Theme.font(30, .light)).monospacedDigit().foregroundStyle(Theme.text)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     if let e = model.nextEvent {
@@ -2122,7 +2134,7 @@ struct StripTimer: View {
             VStack(spacing: 7) {
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
                     Text(Fmt.clock(model.focusRemaining(at: ctx.date)))
-                        .font(.system(size: 18, weight: .light)).monospacedDigit().foregroundStyle(Theme.text)
+                        .font(Theme.font(18, .light)).monospacedDigit().foregroundStyle(Theme.text)
                 }
                 Button { model.focusToggle() } label: { Image(systemName: model.focusRunning ? "pause.fill" : "play.fill") }
                     .buttonStyle(RoundStyle(size: 28))
@@ -2670,7 +2682,8 @@ struct NotificationsTile: View {
                                     AppIcon(id: n.appID, size: 24)
                                 }
                                 VStack(alignment: .leading, spacing: 1) {
-                                    HStack(spacing: 6) {
+                                    // Absender und Zeit stehen auf der Grundlinie des Titels, nicht mittig daneben.
+                                    HStack(alignment: .firstTextBaseline, spacing: 6) {
                                         Text(model.silent ? n.appName : n.title).font(Theme.font(13, .medium)).foregroundStyle(Theme.text).lineLimit(1)
                                         Spacer(minLength: 6)
                                         Text("\(n.appName) · \(Fmt.ago(n.date, now: model.now))")
@@ -2928,7 +2941,7 @@ struct RecordTile: View {
                     Dot(color: Self.red, pulsing: true)
                     TimelineView(.periodic(from: .now, by: 1)) { ctx in
                         Text(Fmt.elapsed(ctx.date.timeIntervalSince(since)))
-                            .font(.system(size: 20, weight: .light)).monospacedDigit().foregroundStyle(Theme.text)
+                            .font(Theme.font(20, .light)).monospacedDigit().foregroundStyle(Theme.text)
                     }
                     Spacer(minLength: 0)
                     Button("Stopp") { model.toggleRecording?() }.buttonStyle(CapsuleStyle(primary: true, compact: true))
@@ -2991,7 +3004,7 @@ struct FocusTile: View {
                 let left = model.focusRemaining(at: ctx.date)
                 let total = TimeInterval(model.focusMinutes * 60)
                 VStack(spacing: 10) {
-                    Text(Fmt.clock(left)).font(.system(size: 34, weight: .light)).monospacedDigit().foregroundStyle(Theme.text)
+                    Text(Fmt.clock(left)).font(Theme.font(34, .light)).monospacedDigit().foregroundStyle(Theme.text)
                     GeometryReader { g in
                         ZStack(alignment: .leading) {
                             Capsule().fill(Theme.raised)
@@ -3194,7 +3207,7 @@ struct VolumeDial: View {
             }
             VStack(spacing: 0) {
                 Text(muted ? "–" : "\(Int((value * 100).rounded()))")
-                    .font(.system(size: 26, weight: .light)).monospacedDigit().foregroundStyle(Theme.text)
+                    .font(Theme.font(26, .light)).monospacedDigit().foregroundStyle(Theme.text)
                     .contentTransition(.numericText())
                 Text(muted ? "stumm" : "gesamt").font(Theme.font(10, .medium)).foregroundStyle(Theme.faint)
             }
