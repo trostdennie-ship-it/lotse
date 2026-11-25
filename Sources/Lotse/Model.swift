@@ -405,6 +405,8 @@ final class IslandModel: ObservableObject {
     }
 
     @Published var stowFiles: [URL] = []
+    /// Dateien, die gerade an Claude gehen sollen (Ablage → „An Claude“).
+    @Published var claudeFiles: [URL] = []
     @Published var stowBusy = false
     @Published var stowResult: [URL] = []
     @Published var stowMessage = ""
@@ -445,7 +447,7 @@ final class IslandModel: ObservableObject {
     // MARK: Hinweise und Hover
 
     /// Offen halten, solange etwas auf eine Entscheidung wartet.
-    var pinned: Bool { !stowFiles.isEmpty || pinnedOpen }
+    var pinned: Bool { !stowFiles.isEmpty || !claudeFiles.isEmpty || pinnedOpen }
 
     /// Per Tastenkürzel geöffnet – bleibt offen, bis Esc oder das Kürzel erneut gedrückt wird.
     @Published var pinnedOpen = false
@@ -459,7 +461,7 @@ final class IslandModel: ObservableObject {
             } else {
                 releaseKeyboard?()
                 // Lag die Maus nie auf der Insel, klappt sonst niemand sie wieder zu.
-                if !hovering, stowFiles.isEmpty, mode == .expanded { hoverWork?.cancel(); mode = .compact }
+                if !hovering, stowFiles.isEmpty, claudeFiles.isEmpty, mode == .expanded { hoverWork?.cancel(); mode = .compact }
             }
         }
     }

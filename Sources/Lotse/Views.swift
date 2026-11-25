@@ -2748,6 +2748,11 @@ struct ShelfView: View {
                 Text("Ablage").font(Theme.font(12, .medium)).foregroundStyle(Theme.text)
                 Text(note).font(Theme.font(11)).foregroundStyle(Theme.faint).lineLimit(1)
                 Spacer(minLength: 6)
+                Button { withAnimation(IslandModel.spring) { model.claudeFiles = Array(model.shelf.prefix(10).map(\.url)) } } label: {
+                    Label(model.shelf.count == 1 ? "An Claude" : "Alle an Claude", systemImage: "sparkle")
+                }
+                .buttonStyle(CapsuleStyle(compact: true))
+                .help("Neue Claude-Session mit diesen Dateien vorbereiten")
                 if model.shelf.contains(where: { Stow.isImage($0.url) }) {
                     Button("Bilder umwandeln") { model.convertShelfImages() }.buttonStyle(CapsuleStyle(compact: true))
                 }
@@ -2785,6 +2790,14 @@ struct ShelfView: View {
                     }
                     .buttonStyle(.plain).offset(x: 6, y: -6)
                     .help("Aus der Ablage nehmen (die Datei bleibt)").accessibilityLabel("\(item.url.lastPathComponent) aus der Ablage nehmen")
+                }
+                if on {
+                    Button { withAnimation(IslandModel.spring) { model.claudeFiles = [item.url] } } label: {
+                        Image(systemName: "sparkle").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.onIce)
+                            .frame(width: 18, height: 18).background(Circle().fill(Theme.ice))
+                    }
+                    .buttonStyle(.plain).offset(x: 6, y: 48)
+                    .help("An Claude geben").accessibilityLabel("\(item.url.lastPathComponent) an Claude geben")
                 }
             }
             Text(item.url.lastPathComponent).font(Theme.font(10)).foregroundStyle(Theme.soft)
@@ -3048,7 +3061,9 @@ struct StowView: View {
     @State private var hovered: String?
 
     var body: some View {
-        if model.stowFiles.isEmpty, model.shelf.isEmpty {
+        if !model.claudeFiles.isEmpty {
+            ToClaudeView(model: model)
+        } else if model.stowFiles.isEmpty, model.shelf.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "tray.and.arrow.down.fill").font(.system(size: 20, weight: .medium)).foregroundStyle(Theme.accent)
                 Text("Zieh Dateien auf die Insel, um sie hier zu parken.").font(Theme.font(13)).foregroundStyle(Theme.soft)

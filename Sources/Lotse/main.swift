@@ -661,6 +661,11 @@ enum Demo {
                          MixApp(id: "us.zoom.xos", name: "Zoom", url: Apps.url("us.zoom.xos"), scriptable: false)]
             m.mode = .expanded; m.tab = .mix; tall = true
         case "stow": m.mode = .expanded; m.tab = .stow; tall = true; m.shelf = []
+        case "to-claude", "to-claude-multi":
+            m.mode = .expanded; m.tab = .stow; tall = true
+            m.claudeFiles = (mode == "to-claude" ? ["/System/Library/QuickLook/iWork.qlgenerator/Contents/Resources/fallback-image-bullet.pdf"]
+                : ["/etc/hosts", "/System/Library/Desktop Pictures/Solid Colors/Teal.png", "/Library/Fonts/Arial Unicode.ttf"])
+                .map { URL(fileURLWithPath: $0) }
         case "shelf":
             m.mode = .expanded; m.tab = .stow; tall = true
             m.shelf = ["/Applications/Safari.app", "/System/Library/Desktop Pictures/Solid Colors/Teal.png", "/etc/hosts",
