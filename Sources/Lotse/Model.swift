@@ -430,6 +430,8 @@ final class IslandModel: ObservableObject {
     }
     @Published var locationDenied = false
     var leaveSuppressed = Set<String>()
+    /// Termine, deren Erinnerung fünf Minuten vorher schon kam.
+    var remindedEarly = Set<String>()
     var leaveLater: (() -> Void)?
     var leavePick: ((TravelMode) -> Void)?
     var leaveAllow: (() -> Void)?
@@ -498,6 +500,8 @@ final class IslandModel: ObservableObject {
 
     /// - peek: Insel kurz aufklappen.  - count: im Zähler der zugeklappten Pille mitzählen.
     func post(_ notice: Notice, peek: Bool = true, count: Bool? = nil) {
+        // Eine (auch nachgereichte) Losgehen-Karte nur, solange ihr Termin noch aussteht und sie zu ihm gehört.
+        if notice.card == "leave", !Leave.cardValid(leave, eventID: notice.event?.id, now: Date()) { return }
         if notice.kind == .system {
             notices.insert(notice, at: 0)
             if notices.count > 30 { notices.removeLast(notices.count - 30) }

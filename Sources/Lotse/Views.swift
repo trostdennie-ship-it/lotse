@@ -1355,8 +1355,8 @@ struct PeekView: View {
     var body: some View {
         if notice.card == "away", let a = model.away {
             AwayView(model: model, summary: a)
-        } else if notice.card == "leave", let c = model.leave {
-            LeaveView(model: model, card: c)
+        } else if notice.card == "leave" {
+            if let c = model.leave, c.event.id == notice.event?.id { LeaveView(model: model, card: c) }
         } else if notice.card == "leave-ask" {
             LeaveAskView(model: model)
         } else if let card = notice.card {

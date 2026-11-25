@@ -604,7 +604,7 @@ enum Demo {
             m.mode = .peek; tall = true
         case "leave", "leave-late":
             m.leave = LeaveCard.demo(now: now, minutesToLeave: mode == "leave" ? 5 : -7)
-            m.peekNotice = Notice(kind: .info, appName: "Losgehen", title: "Kundentermin", body: "", card: "leave", hold: 120)
+            m.peekNotice = Notice(kind: .info, appName: "Losgehen", title: "Kundentermin", body: "", card: "leave", hold: 120, event: m.leave?.event)
             m.mode = .peek; tall = true
         case "leave-ask":
             m.peekNotice = Notice(kind: .info, appName: "Losgehen", title: "Standort für „Losgehen“", body: "", card: "leave-ask", hold: 60)

@@ -162,6 +162,7 @@ final class CalendarSource {
             if secs <= 300, secs > 2, model.leaveSuppressed.contains(e.id) { alerted.insert(key5) }
             if secs <= 300, secs > 2, !alerted.contains(key5) {
                 alerted.insert(key5)
+                model.remindedEarly.insert(e.id)
                 model.post(Notice(kind: .calendar, appID: "com.apple.iCal", appName: app, title: e.title,
                                   body: "Beginnt \(Fmt.until(e.start, now: now)) · \(Fmt.time.string(from: e.start))",
                                   url: e.joinURL, hold: 12, event: e))
@@ -325,7 +326,8 @@ final class ClaudeSource {
         if j["hook_event_name"] as? String == "LotseLeave" {
             // Vorführung „Losgehen" mit erfundenem Termin; `minutes` = Minuten bis zum Losgehen (negativ = spät).
             model.leave = LeaveCard.demo(now: Date(), minutesToLeave: j["minutes"] as? Double ?? 5)
-            model.post(Notice(kind: .info, appName: "Losgehen", title: "Kundentermin", body: "", card: "leave", hold: 120)); return
+            if let c = model.leave { model.post(Notice(kind: .info, appName: "Losgehen", title: c.event.title, body: "", card: "leave", hold: 120, event: c.event)) }
+            return
         }
         if j["hook_event_name"] as? String == "LotseAway" {
             model.showAway?(Date().addingTimeInterval(-60 * (j["minutes"] as? Double ?? 180))); return

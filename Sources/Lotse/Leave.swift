@@ -44,7 +44,7 @@ enum Leave {
 
     /// Orte, die keine Anfahrt bedeuten: Räume, Etagen, Videocalls, Verweise.
     private static let notAPlace = try! NSRegularExpression(
-        pattern: #"^\s*(raum|room|besprechungsraum|meeting ?room)\b|\b(\d+\.\s*og|og\b|etage|stock(werk)?|floor)\b|teams|zoom|google meet|webex|skype|online|virtuell|virtual|telefon|anruf|call\b|siehe|see invite|tbd|tba"#,
+        pattern: #"^\s*(raum|room|besprechungsraum|meeting ?room)\b|\b(\d+\.\s*og|og|etage|stock(werk)?|floor|teams|zoom|google meet|webex|skype|online|virtuell|virtual|telefon|anruf|call|siehe|see invite|tbd|tba)\b"#,
         options: [.caseInsensitive])
 
     static func isCandidate(_ e: CalEvent, now: Date) -> Bool {
@@ -54,6 +54,12 @@ enum Leave {
         let secs = e.start.timeIntervalSince(now)
         guard secs > 0, secs <= horizon else { return false }
         return notAPlace.firstMatch(in: place, range: NSRange(place.startIndex..., in: place)) == nil
+    }
+
+    /// Ob eine Losgehen-Karte noch gezeigt werden darf: Sie gehört zum Termin der Meldung, und der hat noch nicht begonnen.
+    static func cardValid(_ card: LeaveCard?, eventID: String?, now: Date) -> Bool {
+        guard let card, card.event.id == eventID else { return false }
+        return now < card.event.start
     }
 
     static func isRealPlace(_ p: LeavePlace) -> Bool { p.hasStreet || p.isPOI }
@@ -126,6 +132,15 @@ extension Leave {
         check(!isCandidate(ev("Raum Elbe, 3. OG", start: now.addingTimeInterval(7200)), now: now), "Raumangabe kein Fall")
         check(!isCandidate(ev("Microsoft Teams-Besprechung", start: now.addingTimeInterval(7200)), now: now), "Teams kein Fall")
         check(!isCandidate(ev("", start: now.addingTimeInterval(7200)), now: now), "ohne Ort kein Fall")
+        check(isCandidate(ev("Hamburg Hauptbahnhof", start: now.addingTimeInterval(7200)), now: now), "Hauptbahnhof ist ein Fall")
+        check(isCandidate(ev("Ostbahnhof Berlin", start: now.addingTimeInterval(7200)), now: now), "Ostbahnhof ist ein Fall")
+        check(!isCandidate(ev("Zoom", start: now.addingTimeInterval(7200)), now: now), "Zoom kein Fall")
+
+        let demo = LeaveCard.demo(now: now, minutesToLeave: 5)
+        check(cardValid(demo, eventID: demo.event.id, now: now), "gültige Karte")
+        check(!cardValid(nil, eventID: demo.event.id, now: now), "ohne Karte nicht gültig")
+        check(!cardValid(demo, eventID: "anderer", now: now), "andere Termin-ID nicht gültig")
+        check(!cardValid(demo, eventID: demo.event.id, now: demo.event.start), "nach Beginn nicht gültig")
 
         func place(street: Bool, poi: Bool) -> LeavePlace { LeavePlace(address: "x", short: "x", hasStreet: street, isPOI: poi, metersAway: 1000) }
         check(isRealPlace(place(street: true, poi: false)), "Straße zählt")
@@ -233,7 +248,10 @@ final class LeaveWatcher: NSObject, CLLocationManagerDelegate {
         plans = plans.filter { ids.contains($0.key) }
         again = again.filter { ids.contains($0.key) }
         model.leaveSuppressed = model.leaveSuppressed.intersection(ids)
-        if let c = model.leave, !ids.contains(c.event.id) { model.leave = nil }
+        if let c = model.leave, !ids.contains(c.event.id) {
+            model.leave = nil
+            if model.peekNotice?.card == "leave" { model.dismissPeek() }
+        }
         guard !cands.isEmpty else { exact?.invalidate(); return }
 
         switch manager.authorizationStatus {
@@ -272,11 +290,13 @@ final class LeaveWatcher: NSObject, CLLocationManagerDelegate {
         let req = MKLocalSearch.Request()
         req.naturalLanguageQuery = text
         if let l = location { req.region = MKCoordinateRegion(center: l.coordinate, latitudinalMeters: 200_000, longitudinalMeters: 200_000) }
-        MKLocalSearch(request: req).start { [weak self] resp, _ in
+        MKLocalSearch(request: req).start { [weak self] resp, error in
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.resolving.remove(text)
-                guard let item = resp?.mapItems.first else { self.places[text] = .some(nil); return }
+                // Ohne Antwort (kein Netz) nicht merken – beim nächsten Durchgang neu versuchen.
+                guard let resp else { if error == nil { self.places[text] = .some(nil) }; return }
+                guard let item = resp.mapItems.first else { self.places[text] = .some(nil); return }
                 let pm = item.placemark
                 let meters = self.location.map { $0.distance(from: CLLocation(latitude: pm.coordinate.latitude, longitude: pm.coordinate.longitude)) } ?? .infinity
                 let place = LeavePlace(address: text,
@@ -343,6 +363,8 @@ final class LeaveWatcher: NSObject, CLLocationManagerDelegate {
             guard let e = model.events.first(where: { $0.id == id }),
                   let place = places[e.place.trimmingCharacters(in: .whitespacesAndNewlines)] ?? nil else { continue }
             let due = again[id].map { now >= $0 && now < e.start } ?? false
+            // Kam die normale Erinnerung fünf Minuten vorher schon (Plan zu spät fertig), keine zweite Karte.
+            if !shown.contains(id), model.remindedEarly.contains(id) { shown.insert(id); continue }
             if due || Leave.shouldShow(plan, start: e.start, now: now, shown: shown.contains(id)) {
                 again[id] = nil
                 shown.insert(id)
@@ -355,7 +377,7 @@ final class LeaveWatcher: NSObject, CLLocationManagerDelegate {
     private func show(_ e: CalEvent, _ plan: LeavePlan, _ place: LeavePlace) {
         model.leave = LeaveCard(event: e, plan: plan, place: place)
         log("Losgehen: Karte für Termin in \(Int(e.start.timeIntervalSinceNow / 60)) Min")
-        model.post(Notice(kind: .info, appName: "Losgehen", title: e.title, body: "", card: "leave", hold: 120))
+        model.post(Notice(kind: .info, appName: "Losgehen", title: e.title, body: "", card: "leave", hold: 120, event: e))
     }
 
     /// Weckt genau dann, wenn die nächste Karte fällig ist.
