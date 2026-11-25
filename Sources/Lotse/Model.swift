@@ -27,7 +27,7 @@ struct Notice: Identifiable {
     /// Der Termin hinter einer Erinnerung – daraus baut die Insel die Terminkarte.
     var event: CalEvent? = nil
     /// Kleine Meldung ohne Knöpfe (Pille oder Geräte-Karte).
-    var small: Bool { brief || card != nil }
+    var small: Bool { brief || (card != nil && card != "away") }
 }
 
 extension Notice.Kind {
@@ -211,7 +211,7 @@ final class IslandModel: ObservableObject {
             // Nach dem Zuklappen eine wartende Termin-Erinnerung nachreichen (höchstens drei Minuten alt).
             guard mode == .compact, oldValue == .expanded, let w = waitingPeek else { return }
             waitingPeek = nil
-            guard Date().timeIntervalSince(w.since) < 180 else { return }
+            guard Date().timeIntervalSince(w.since) < (w.notice.card == "away" ? 1800 : 180) else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.post(w.notice) }
         }
     }
@@ -416,6 +416,10 @@ final class IslandModel: ObservableObject {
     var musicAction: ((String) -> Void)?
     var answer: ((PermissionAsk, String) -> Void)?
     var openSession: ((ClaudeSession) -> Void)?
+    /// „Während du weg warst": die Bilanz der letzten Pause, bis sie als gesehen markiert ist.
+    @Published var away: AwaySummary?
+    var awayLater: (() -> Void)?
+    var showAway: ((Date) -> Void)?
     var releaseKeyboard: (() -> Void)?
 
     private var hovering = false
@@ -500,7 +504,7 @@ final class IslandModel: ObservableObject {
         // Eine offene Freigabe im Kurz-Hinweis wird von anderen Hinweisen nicht verdrängt.
         if mode == .peek, peekAsk != nil, !urgent { return }
         // Ist die Insel gerade offen, geht eine Termin-Erinnerung nicht verloren: Sie erscheint, sobald die Insel zuklappt.
-        if peek, mode == .expanded, notice.kind == .calendar { waitingPeek = (notice, Date()); return }
+        if peek, mode == .expanded, notice.kind == .calendar || notice.card == "away" { waitingPeek = (notice, Date()); return }
         guard peek, mode == .compact || mode == .peek else { return }
         peekWork?.cancel()
         var shown = notice

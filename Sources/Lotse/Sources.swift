@@ -320,6 +320,9 @@ final class ClaudeSource {
         // Beispiel-Hinweise zum Ansehen (ausgelöst über eine Datei im Ereignis-Ordner).
         if j["hook_event_name"] as? String == "LotseTour" { model.runTour(); return }
         if j["hook_event_name"] as? String == "LotseFleet" { model.runFleet(); return }
+        if j["hook_event_name"] as? String == "LotseAway" {
+            model.showAway?(Date().addingTimeInterval(-60 * (j["minutes"] as? Double ?? 180))); return
+        }
         if j["hook_event_name"] as? String == "LotseDemo" {
             let kind = Notice.Kind(demo: j["kind"] as? String ?? "")
             var demo = Notice(kind: j["card"] != nil && j["app"] == nil ? .info : kind, appID: j["app"] as? String, appName: j["name"] as? String ?? "Beispiel",

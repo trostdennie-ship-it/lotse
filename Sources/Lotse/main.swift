@@ -330,7 +330,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.model.sharing = share
         }
         meeting.start()
-        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe]
+        let away = AwayWatcher(model: model)
+        away.start()
+        model.showAway = { [weak away] since in away?.show(since: since) }
+        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe, away]
         snap.start()
         setupMenu()
         log("Lotse gestartet")
@@ -588,6 +591,15 @@ enum Demo {
             m.unread = 0; m.events = []; m.wave = WaveStyle(rawValue: String(w.dropFirst(5))) ?? .fine
         case "compact-calm": m.sessions = []; m.track?.isPlaying = false; m.events = []
         case "peek": m.mode = .peek
+        case "away":
+            m.notices += [Notice(kind: .system, appID: "com.apple.mail", appName: "Mail", title: "Stadtwerke", body: "Ihre Abschlagsrechnung", date: now.addingTimeInterval(-3000)),
+                          Notice(kind: .system, appID: "com.apple.mail", appName: "Mail", title: "Newsletter", body: "", date: now.addingTimeInterval(-6000))]
+            m.sessions[1].doneAt = now.addingTimeInterval(-1200)
+            var w = ClaudeSession(id: "w", project: "Website", status: .waiting, message: "", updated: now.addingTimeInterval(-900)); w.model = "Opus 5.5"
+            m.sessions.append(w)
+            m.away = AwaySummary.collect(m, since: now.addingTimeInterval(-8.5 * 3600))
+            m.peekNotice = Notice(kind: .info, appName: "Willkommen zurück", title: "Willkommen zurück", body: "", card: "away", hold: 45)
+            m.mode = .peek; tall = true
         case "peek-system": m.peekNotice = m.notices[0]; m.mode = .peek
         case "peek-cal", "peek-cal-long":
             let long = mode == "peek-cal-long"
