@@ -330,6 +330,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.model.sharing = share
         }
         meeting.start()
+        let dockMusic = DockMusicWindow(model: model)
+        dockMusic.start()
+        sources.append(dockMusic)
         let away = AwayWatcher(model: model)
         away.start()
         model.showAway = { [weak away] since in away?.show(since: since) }
@@ -489,6 +492,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 enum Demo {
     @MainActor static func snapshot(to path: String, mode: String, notch: Bool) {
         let (m, tall) = build(mode: mode, notch: notch)
+        if mode == "dock-music" {
+            m.track?.artwork = NSWorkspace.shared.icon(forFile: "/Applications/Spotify.app")
+            let r = ImageRenderer(content: DockMusicView(model: m).frame(width: DockSpot.width, height: 64).padding(24)
+                .background(LinearGradient(colors: [Color(red: 0.55, green: 0.62, blue: 0.78), Color(red: 0.80, green: 0.62, blue: 0.55)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing)))
+            r.scale = 2
+            if let img = r.nsImage, let tiff = img.tiffRepresentation,
+               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                try? png.write(to: URL(fileURLWithPath: path))
+            }
+            return
+        }
         render(m, tall: tall, to: path)
     }
 

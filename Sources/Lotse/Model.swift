@@ -425,6 +425,14 @@ final class IslandModel: ObservableObject {
     var awayLater: (() -> Void)?
     /// „Losgehen": die Karte zum nächsten Aufbruch, die Erlaubnis-Karte und die Termine, deren 5-Minuten-Erinnerung entfällt.
     @Published var leave: LeaveCard?
+    /// Musik als Glas-Widget neben dem Dock (Einstellungen → Allgemein).
+    @Published var dockMusicOn: Bool = UserDefaults.standard.object(forKey: "dockMusicOn") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(dockMusicOn, forKey: "dockMusicOn") }
+    }
+    /// Das Widget ist gerade zu sehen.
+    @Published var dockMusicShown = false
+    /// Schalter an und das Dock steht unten (auch im Vollbild): Die Pille zeigt dann nur das Cover.
+    @Published var dockMusicHint = false
     @Published var leaveOn: Bool = UserDefaults.standard.object(forKey: "leaveOn") as? Bool ?? true {
         didSet { UserDefaults.standard.set(leaveOn, forKey: "leaveOn") }
     }
