@@ -125,6 +125,11 @@ private struct GeneralPane: View {
                 Text("Mitgeschrieben wird auf diesem Mac; der Ton verlässt ihn nicht. Beim ersten Mal lädt macOS einmalig das Sprachmodell von Apple.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Musik") {
+                Toggle("Musik neben dem Dock", isOn: $model.dockMusicOn)
+                Text("Zeigt laufende Musik als Glas-Widget rechts neben dem Dock. Oben bleibt dann nur das Cover.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Losgehen") {
                 Toggle("Rechtzeitig zum Aufbruch erinnern", isOn: $model.leaveOn)
                 Text(model.locationDenied

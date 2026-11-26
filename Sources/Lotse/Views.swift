@@ -1071,7 +1071,8 @@ struct TopRow: View {
             let text = what.isEmpty ? "Claude arbeitet · \(s.project)" : "\(s.project) · \(what)"
             return Status(text: hide ? "Claude arbeitet" : text, short: "Claude", color: Theme.accent, pulsing: true)
         }
-        if let t = model.track, t.isPlaying { return Status(text: "\(t.title) · \(t.artist)") }
+        // Läuft die Musik unten neben dem Dock, bleibt oben nur das Cover: die Flügel gehören dann Claude, Terminen und Mitteilungen.
+        if let t = model.track, t.isPlaying { return Status(text: model.dockMusicHint ? "" : "\(t.title) · \(t.artist)") }
         if let e = model.nextEvent, e.start.timeIntervalSince(model.now) < 8 * 3600 {
             let time = Fmt.time.string(from: e.start)
             return Status(text: hide ? "Termin · \(time)" : "\(e.title) · \(time)", short: time)

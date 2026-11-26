@@ -575,6 +575,9 @@ enum Demo {
         case "compact-multi": m.events = []; m.sessions.removeAll { $0.status == .waiting }
         case "multi": m.mode = .expanded; tall = true
         case "compact": m.unread = 2
+        case "compact-music", "compact-dock":
+            m.unread = 0; m.events = []; m.sessions = []; m.asks = []; m.notices = []
+            m.dockMusicHint = mode == "compact-dock"
         case "compact-work": m.unread = 0; m.events = []
             if let d = ProcessInfo.processInfo.environment["LOTSE_DONE"].flatMap({ Int($0) }) { m.sessions[0].planDone = d }
         case "transcript":
