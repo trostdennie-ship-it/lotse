@@ -429,6 +429,12 @@ final class IslandModel: ObservableObject {
     @Published var dockMusicOn: Bool = UserDefaults.standard.object(forKey: "dockMusicOn") as? Bool ?? true {
         didSet { UserDefaults.standard.set(dockMusicOn, forKey: "dockMusicOn") }
     }
+    /// Ablage als Glasfeld links neben dem Dock (Einstellungen → Allgemein).
+    @Published var dockShelfOn: Bool = UserDefaults.standard.object(forKey: "dockShelfOn") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(dockShelfOn, forKey: "dockShelfOn") }
+    }
+    /// Gerade wird irgendwo eine Datei gezogen.
+    @Published var filesDragging = false
     /// Das Widget ist gerade zu sehen.
     @Published var dockMusicShown = false
     /// Schalter an und das Dock steht unten (auch im Vollbild): Die Pille zeigt dann nur das Cover.
@@ -639,6 +645,7 @@ final class IslandModel: ObservableObject {
     }
 
     func setDragging(_ dragging: Bool) {
+        if filesDragging != dragging { filesDragging = dragging }
         if dragging, mode == .compact || mode == .peek {
             peekWork?.cancel()
             withAnimation(Self.spring) { mode = .drop }
@@ -648,9 +655,14 @@ final class IslandModel: ObservableObject {
     }
 
     /// Losgelassene Dateien wandern in die Ablage. Umgewandelt wird erst auf Wunsch.
-    func acceptDrop(_ urls: [URL]) {
+    func acceptDrop(_ urls: [URL], open: Bool = true) {
         var list = shelf
         for u in urls where !list.contains(where: { $0.url == u }) { list.insert(ShelfItem(url: u, added: Date()), at: 0) }
+        guard open else {
+            // Am Dock abgelegt: nur parken, die Insel bleibt zu.
+            withAnimation(Self.spring) { shelf = Array(list.prefix(24)) }
+            return
+        }
         withAnimation(Self.spring) {
             shelf = Array(list.prefix(24))
             stowFiles = []; stowResult = []; stowMessage = ""

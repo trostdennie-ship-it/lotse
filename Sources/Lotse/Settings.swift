@@ -125,9 +125,12 @@ private struct GeneralPane: View {
                 Text("Mitgeschrieben wird auf diesem Mac; der Ton verlässt ihn nicht. Beim ersten Mal lädt macOS einmalig das Sprachmodell von Apple.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Musik") {
+            Section("Dock") {
                 Toggle("Musik neben dem Dock", isOn: $model.dockMusicOn)
                 Text("Zeigt laufende Musik als Glas-Widget rechts neben dem Dock. Oben bleibt dann nur das Cover.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Ablage neben dem Dock", isOn: $model.dockShelfOn)
+                Text("Zeigt geparkte Dateien links neben dem Dock. Erscheint nur, wenn etwas in der Ablage liegt oder du eine Datei ziehst.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Losgehen") {

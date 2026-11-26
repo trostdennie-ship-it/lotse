@@ -332,12 +332,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         meeting.start()
         let dockMusic = DockMusicWindow(model: model)
         dockMusic.start()
+        let dockShelf = DockShelfWindow(model: model)
+        dockShelf.start()
         let away = AwayWatcher(model: model)
         away.start()
         model.showAway = { [weak away] since in away?.show(since: since) }
         let leave = LeaveWatcher(model: model)
         leave.start()
-        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe, away, leave, dockMusic]
+        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe, away, leave, dockMusic, dockShelf]
         snap.start()
         setupMenu()
         log("Lotse gestartet")
@@ -491,6 +493,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 enum Demo {
     @MainActor static func snapshot(to path: String, mode: String, notch: Bool) {
         let (m, tall) = build(mode: mode, notch: notch)
+        if mode == "dock-shelf" {
+            m.shelf = ["/Applications/Safari.app", "/System/Library/Desktop Pictures/Solid Colors/Teal.png", "/etc/hosts",
+                       "/Library/Fonts/Arial Unicode.ttf", "/System/Applications/Calendar.app", "/System/Applications/Notes.app",
+                       "/System/Applications/Maps.app"].map { ShelfItem(url: URL(fileURLWithPath: $0), added: Date()) }
+            let r = ImageRenderer(content: DockShelfView(model: m).frame(width: DockShelfLayout.width(count: m.shelf.count), height: 72).padding(24)
+                .background(LinearGradient(colors: [Color(red: 0.55, green: 0.62, blue: 0.78), Color(red: 0.80, green: 0.62, blue: 0.55)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing)))
+            r.scale = 2
+            if let img = r.nsImage, let tiff = img.tiffRepresentation,
+               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                try? png.write(to: URL(fileURLWithPath: path))
+            }
+            return
+        }
         if mode == "dock-music" {
             m.track?.artwork = NSWorkspace.shared.icon(forFile: "/Applications/Spotify.app")
             let r = ImageRenderer(content: DockMusicView(model: m).frame(width: DockSpot.width, height: 64).padding(24)
