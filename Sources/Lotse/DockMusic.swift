@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import SwiftUI
+import Combine
 
 // MARK: - Musik neben dem Dock
 
@@ -14,12 +15,25 @@ struct DockSpot {
     static func frame(dock: CGRect?, screen: CGRect, visible: CGRect) -> CGRect? {
         guard visible.minX <= screen.minX, visible.maxX >= screen.maxX else { return nil }   // Dock links oder rechts
         let strip = visible.minY - screen.minY
-        guard strip > 0 else { return nil }                                                   // Dock unten nicht da
+        guard strip >= minStrip else { return nil }                                           // Dock unten nicht da oder ausgeblendet
         guard let d = dock else {
             return CGRect(x: screen.maxX - width - gap, y: screen.minY, width: width, height: strip)
         }
+        // Ein Rahmen außerhalb des Bildschirms gehört zu einem weggeschobenen Dock.
+        guard d.minY >= screen.minY - 1, d.maxY <= visible.minY + 4, d.minX >= screen.minX, d.maxX <= screen.maxX else { return nil }
         let r = CGRect(x: d.maxX + gap, y: d.minY, width: width, height: d.height)
         return r.maxX <= screen.maxX ? r : nil
+    }
+
+    /// Mindesthöhe des Dock-Streifens: Ein automatisch ausgeblendetes Dock lässt nur ein paar Punkte frei.
+    static let minStrip: CGFloat = 20
+
+    /// Auf welchem Bildschirm steht das Dock? Erst nach dem gelesenen Rahmen, sonst nach dem freigehaltenen Streifen unten.
+    /// nil: kein Bildschirm hat das Dock unten (Vollbild, seitlich oder ausgeblendet).
+    static func pick(dock: CGRect?, screens: [(frame: CGRect, visible: CGRect)]) -> Int? {
+        if let d = dock, let i = screens.firstIndex(where: { $0.frame.contains(CGPoint(x: d.midX, y: d.midY)) }) { return i }
+        return screens.firstIndex { $0.visible.minY - $0.frame.minY >= minStrip
+            && $0.visible.minX <= $0.frame.minX && $0.visible.maxX >= $0.frame.maxX }
     }
 
     static func selfTest() -> [String] {
@@ -34,6 +48,14 @@ struct DockSpot {
         check("Ersatz-Ecke", frame(dock: nil, screen: screen, visible: visible), CGRect(x: 1512 - 300 - 8, y: 0, width: 300, height: 70))
         check("Dock versteckt", frame(dock: nil, screen: screen, visible: screen), nil)
         check("zu breit", frame(dock: CGRect(x: 400, y: 0, width: 1000, height: 70), screen: screen, visible: visible), nil)
+        check("Ausblenden-Streifen", frame(dock: nil, screen: screen, visible: CGRect(x: 0, y: 4, width: 1512, height: 948)), nil)
+        check("Dock unter dem Rand", frame(dock: CGRect(x: 400, y: -66, width: 700, height: 70), screen: screen, visible: visible), nil)
+        // Zweiter Bildschirm rechts daneben, das Dock steht dort.
+        let second = (frame: CGRect(x: 1512, y: 0, width: 1920, height: 1080), visible: CGRect(x: 1512, y: 70, width: 1920, height: 980))
+        let first = (frame: screen, visible: CGRect(x: 0, y: 0, width: 1512, height: 952))
+        if pick(dock: CGRect(x: 2000, y: 0, width: 600, height: 70), screens: [first, second]) != 1 { out.append("Dock-Musik: Dock auf dem zweiten Bildschirm nicht gefunden") }
+        if pick(dock: nil, screens: [first, second]) != 1 { out.append("Dock-Musik: Bildschirm mit Dock-Streifen nicht gefunden") }
+        if pick(dock: nil, screens: [first]) != nil { out.append("Dock-Musik: Vollbild sollte keinen Bildschirm liefern") }
         return out
     }
 }
@@ -47,7 +69,10 @@ enum DockReader {
         AXUIElementSetMessagingTimeout(app, 0.25)
         var kids: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, kAXChildrenAttribute as CFString, &kids) == .success,
-              let list = (kids as? [AXUIElement])?.first(where: { role($0) == kAXListRole as String }) else { return nil }
+              let children = kids as? [AXUIElement] else { return nil }
+        // Die Zeitgrenze gilt je Element: Ein hängendes Dock darf die Insel nicht für Sekunden einfrieren.
+        children.forEach { AXUIElementSetMessagingTimeout($0, 0.25) }
+        guard let list = children.first(where: { role($0) == kAXListRole as String }) else { return nil }
         var pos = CGPoint.zero, size = CGSize.zero
         var pv: CFTypeRef?, sv: CFTypeRef?
         guard AXUIElementCopyAttributeValue(list, kAXPositionAttribute as CFString, &pv) == .success,
@@ -152,18 +177,20 @@ final class DockMusicWindow {
             timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.update() }
         } else if !active { timer?.invalidate(); timer = nil }
 
-        guard let screen = NSScreen.screens.first else { return }
-        let dock = model.dockMusicOn ? DockReader.frame() : nil
-        let bottom = screen.visibleFrame.minY > screen.frame.minY
-            && screen.visibleFrame.minX <= screen.frame.minX && screen.visibleFrame.maxX >= screen.frame.maxX
-        let spot = active ? DockSpot.frame(dock: dock, screen: screen.frame, visible: screen.visibleFrame) : nil
-        // Im Vollbild ist das Dock weg, die Pille soll aber trotzdem nur das Cover zeigen: Hinweis bleibt, solange das Dock sonst unten steht.
-        let fullscreen = !bottom && Self.dockNormallyBottom
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return }
+        let normal = Self.dockNormallyBottom
+        let dock = model.dockMusicOn && normal && active ? DockReader.frame() : nil
+        let index = normal ? DockSpot.pick(dock: dock, screens: screens.map { ($0.frame, $0.visibleFrame) }) : nil
+        let spot = active ? index.flatMap { DockSpot.frame(dock: dock, screen: screens[$0].frame, visible: screens[$0].visibleFrame) } : nil
+        // Im Vollbild ist das Dock weg, die Pille soll aber trotzdem nur das Cover zeigen: Kein Bildschirm hat gerade
+        // einen Dock-Streifen, obwohl das Dock laut Einstellung unten steht.
+        let fullscreen = normal && index == nil
         let hint = model.dockMusicOn && (spot != nil || fullscreen)
         if model.dockMusicHint != hint { model.dockMusicHint = hint }
 
         let reason = !model.dockMusicOn ? "abgeschaltet" : model.track == nil ? "keine Musik"
-            : fullscreen ? "Vollbild" : spot == nil ? "Dock nicht unten oder kein Platz" : ""
+            : fullscreen ? "Vollbild" : !normal ? "Dock seitlich oder ausgeblendet" : spot == nil ? "kein Platz neben dem Dock" : ""
         if let r = spot {
             if panel.frame != r { panel.setFrame(r, display: true) }
             if !panel.isVisible {
@@ -180,6 +207,11 @@ final class DockMusicWindow {
             log("Dock-Musik: \(state)")
         }
         if model.dockMusicShown != (spot != nil) { model.dockMusicShown = spot != nil }
+    }
+
+    deinit {
+        timer?.invalidate()
+        bag.forEach { if !($0 is AnyCancellable) { NSWorkspace.shared.notificationCenter.removeObserver($0); NotificationCenter.default.removeObserver($0) } }
     }
 
     /// Steht das Dock laut Einstellung unten und wird nicht automatisch ausgeblendet?

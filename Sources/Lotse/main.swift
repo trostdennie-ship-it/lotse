@@ -332,13 +332,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         meeting.start()
         let dockMusic = DockMusicWindow(model: model)
         dockMusic.start()
-        sources.append(dockMusic)
         let away = AwayWatcher(model: model)
         away.start()
         model.showAway = { [weak away] since in away?.show(since: since) }
         let leave = LeaveWatcher(model: model)
         leave.start()
-        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe, away, leave]
+        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe, away, leave, dockMusic]
         snap.start()
         setupMenu()
         log("Lotse gestartet")
