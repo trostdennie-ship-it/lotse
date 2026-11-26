@@ -20,8 +20,10 @@ struct DockSpot {
             return CGRect(x: screen.maxX - width - gap, y: screen.minY, width: width, height: strip)
         }
         // Ein Rahmen außerhalb des Bildschirms gehört zu einem weggeschobenen Dock.
-        guard d.minY >= screen.minY - 1, d.maxY <= visible.minY + 4, d.minX >= screen.minX, d.maxX <= screen.maxX else { return nil }
-        let r = CGRect(x: d.maxX + gap, y: d.minY, width: width, height: d.height)
+        guard d.minY >= screen.minY - 1, d.maxY <= visible.minY + 8, d.minX >= screen.minX, d.maxX <= screen.maxX else { return nil }
+        // Die Glasfläche des Docks endet oben genau am freigehaltenen Streifen und ist etwas höher als die Symbolliste.
+        let h = d.height + 2
+        let r = CGRect(x: d.maxX + gap, y: visible.minY - h, width: width, height: h)
         return r.maxX <= screen.maxX ? r : nil
     }
 
@@ -39,15 +41,16 @@ struct DockSpot {
     static func selfTest() -> [String] {
         var out: [String] = []
         let screen = CGRect(x: 0, y: 0, width: 1512, height: 982)
-        let visible = CGRect(x: 0, y: 70, width: 1512, height: 882)
+        let visible = CGRect(x: 0, y: 76, width: 1512, height: 876)
         func check(_ name: String, _ got: CGRect?, _ want: CGRect?) {
             if got != want { out.append("Dock-Musik \(name): erwartet \(want.map { "\($0)" } ?? "nil"), bekommen \(got.map { "\($0)" } ?? "nil")") }
         }
-        check("neben dem Dock", frame(dock: CGRect(x: 400, y: 0, width: 700, height: 70), screen: screen, visible: visible),
-              CGRect(x: 1108, y: 0, width: 300, height: 70))
-        check("Ersatz-Ecke", frame(dock: nil, screen: screen, visible: visible), CGRect(x: 1512 - 300 - 8, y: 0, width: 300, height: 70))
+        // Werte vom MacBook: Symbolliste 10…80, Glas und Streifen enden bei 76.
+        check("neben dem Dock", frame(dock: CGRect(x: 400, y: 10, width: 700, height: 70), screen: screen, visible: visible),
+              CGRect(x: 1108, y: 4, width: 300, height: 72))
+        check("Ersatz-Ecke", frame(dock: nil, screen: screen, visible: visible), CGRect(x: 1512 - 300 - 8, y: 0, width: 300, height: 76))
         check("Dock versteckt", frame(dock: nil, screen: screen, visible: screen), nil)
-        check("zu breit", frame(dock: CGRect(x: 400, y: 0, width: 1000, height: 70), screen: screen, visible: visible), nil)
+        check("zu breit", frame(dock: CGRect(x: 400, y: 10, width: 1000, height: 70), screen: screen, visible: visible), nil)
         check("Ausblenden-Streifen", frame(dock: nil, screen: screen, visible: CGRect(x: 0, y: 4, width: 1512, height: 948)), nil)
         check("Dock unter dem Rand", frame(dock: CGRect(x: 400, y: -66, width: 700, height: 70), screen: screen, visible: visible), nil)
         // Zweiter Bildschirm rechts daneben, das Dock steht dort.
@@ -95,19 +98,29 @@ enum DockReader {
 
 struct DockMusicView: View {
     @ObservedObject var model: IslandModel
+    @State private var hovered: String?
 
     var body: some View {
         if let t = model.track {
             HStack(spacing: 10) {
-                Cover(image: t.artwork, size: 46, radius: 9)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(model.discreet ? (t.isPlaying ? "Musik läuft" : "Pausiert") : t.title)
-                        .font(Theme.font(13, .medium)).foregroundStyle(Theme.text)
-                    if !model.discreet {
-                        Text(t.artist).font(Theme.font(11)).foregroundStyle(Theme.muted)
+                Button { Apps.activate("com.spotify.client") } label: {
+                    HStack(spacing: 10) {
+                        Cover(image: t.artwork, size: 46, radius: 9)
+                            .scaleEffect(hovered == "cover" ? 1.04 : 1)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(model.discreet ? (t.isPlaying ? "Musik läuft" : "Pausiert") : t.title)
+                                .font(Theme.font(13, .medium)).foregroundStyle(Theme.text)
+                            if !model.discreet {
+                                Text(t.artist).font(Theme.font(11)).foregroundStyle(Theme.muted)
+                            }
+                        }
+                        .lineLimit(1)
                     }
+                    .opacity(hovered == "cover" ? 1 : 0.92)
+                    .contentShape(Rectangle())
                 }
-                .lineLimit(1)
+                .buttonStyle(.plain).help("Spotify öffnen")
+                .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovered = h ? "cover" : (hovered == "cover" ? nil : hovered) } }
                 Spacer(minLength: 4)
                 HStack(spacing: 2) {
                     key("backward.fill", "Zurück", 11) { model.musicAction?("previous track") }
@@ -122,11 +135,17 @@ struct DockMusicView: View {
     }
 
     private func key(_ symbol: String, _ label: String, _ size: CGFloat, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol).font(.system(size: size, weight: .semibold)).foregroundStyle(Theme.text)
-                .frame(width: 28, height: 28).contentShape(Rectangle())
+        let on = hovered == symbol
+        return Button(action: action) {
+            Image(systemName: symbol).font(.system(size: size, weight: .semibold))
+                .foregroundStyle(on ? Theme.onIce : Theme.text)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(on ? Color.white.opacity(0.92) : .clear))
+                .scaleEffect(on ? 1.08 : 1)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain).help(label).accessibilityLabel(label)
+        .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovered = h ? symbol : (hovered == symbol ? nil : hovered) } }
     }
 }
 
@@ -134,6 +153,11 @@ struct DockMusicView: View {
 private final class DockPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+}
+
+/// Der erste Klick zählt sofort, auch wenn Lotse nicht vorne ist.
+private final class DockHost: NSHostingView<DockMusicView> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 final class DockMusicWindow {
@@ -153,7 +177,7 @@ final class DockMusicWindow {
         panel.hasShadow = false
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
-        panel.contentView = NSHostingView(rootView: DockMusicView(model: model))
+        panel.contentView = DockHost(rootView: DockMusicView(model: model))
     }
 
     func start() {
@@ -201,7 +225,7 @@ final class DockMusicWindow {
         } else if panel.isVisible {
             panel.orderOut(nil)
         }
-        let state = spot != nil ? "sichtbar" + (dock == nil ? " (Ecke, ohne Dock-Rahmen)" : "") : "ausgeblendet (\(reason))"
+        let state = spot != nil ? "sichtbar" + (dock.map { " Dock \(Int($0.minX)),\(Int($0.minY)) \(Int($0.width))×\(Int($0.height)), Streifen \(Int(screens[index ?? 0].visibleFrame.minY))" } ?? " (Ecke, ohne Dock-Rahmen)") : "ausgeblendet (\(reason))"
         if state != lastReason {
             lastReason = state
             log("Dock-Musik: \(state)")
