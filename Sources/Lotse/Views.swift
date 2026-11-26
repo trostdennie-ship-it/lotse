@@ -1109,6 +1109,8 @@ struct TopRow: View {
                     Color.clear.frame(width: max(0, model.notchWidth + 12 - 16))      // 6 Punkte Luft je Seite, abzüglich der Abstände
                     HStack(spacing: 8) {
                         if model.mode == .compact, case .recording = model.recState { trail }      // der Mitschnitt bleibt immer sichtbar
+                        // Arbeitet Claude einen Plan ab, gehört der Flügel dem Fortschritt – keine Laufschrift darüber.
+                        else if model.mode == .compact, workingForTrail?.planTotal ?? 0 > 0, model.unread == 0, !model.discreet, !model.focusRunning { trail }
                         else if model.mode == .compact { Ticker(full: Self.halves(status).1, alignment: .trailing, stay: !Self.hasTrail(model), color: Theme.soft) { trail } }
                         else { trail }
                     }
