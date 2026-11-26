@@ -1047,7 +1047,8 @@ struct TopRow: View {
         }
         let busy = model.sessions.contains { $0.status == .working }
         // Arbeitet Claude, zeigt die Pille, woran – der nächste Termin drängt sich erst fünf Minuten vorher vor.
-        if let e = model.nextEvent, e.start.timeIntervalSince(model.now) < (busy ? 300 : 3600),
+        // Steht der Termin unten neben dem Dock, nennt ihn die Laufschrift nicht noch einmal.
+        if !model.dockEventHint, let e = model.nextEvent, e.start.timeIntervalSince(model.now) < (busy ? 300 : 3600),
            !busy || e.start.timeIntervalSince(model.now) > -60 {
             // Läuft der Termin schon, sagt die Pille, welcher es ist und bis wann – „läuft" allein erklärt nichts.
             if e.start <= model.now {
@@ -1073,7 +1074,7 @@ struct TopRow: View {
         }
         // Läuft die Musik unten neben dem Dock, bleibt oben nur das Cover: die Flügel gehören dann Claude, Terminen und Mitteilungen.
         if let t = model.track, t.isPlaying { return Status(text: model.dockMusicHint ? "" : "\(t.title) · \(t.artist)") }
-        if let e = model.nextEvent, e.start.timeIntervalSince(model.now) < 8 * 3600 {
+        if !model.dockEventHint, let e = model.nextEvent, e.start.timeIntervalSince(model.now) < 8 * 3600 {
             let time = Fmt.time.string(from: e.start)
             return Status(text: hide ? "Termin · \(time)" : "\(e.title) · \(time)", short: time)
         }
@@ -1847,6 +1848,12 @@ struct DropHint: View {
 struct HomeView: View {
     @ObservedObject var model: IslandModel
 
+    /// Drei Kacheln mit dem Wetter in der Mitte, und oben ist eine Aussparung: Dann steht das Wetter genau darunter.
+    private var weatherUnderNotch: Bool {
+        model.hasNotch && model.notchWidth > 0 && model.track != nil && model.shows("home.music") && model.shows("home.date")
+            && !(model.focusRunning || model.focusPaused != nil)
+    }
+
     /// Sind alle Kacheln der Leiste abgeschaltet oder leer?
     private var stripEmpty: Bool {
         !(model.track != nil && model.shows("home.music")) && !model.shows("home.weather") && !model.shows("home.date")
@@ -1858,7 +1865,10 @@ struct HomeView: View {
             // Die Kachelleiste: das Wichtigste des Tages in einer flachen Reihe.
             HStack(spacing: 9) {
                 if model.track != nil, model.shows("home.music") { StripMusic(model: model).frame(maxWidth: .infinity).modifier(Rise(index: 0)) }
-                if model.shows("home.weather") { StripWeather(model: model).frame(maxWidth: .infinity).modifier(Rise(index: 1)) }
+                if model.shows("home.weather") {
+                    // Steht das Wetter in der Mitte, ist es genau so breit wie die Aussparung darüber.
+                    StripWeather(model: model).frame(maxWidth: weatherUnderNotch ? model.notchWidth : .infinity).modifier(Rise(index: 1))
+                }
                 if model.shows("home.date") { StripDate(model: model).frame(maxWidth: .infinity).modifier(Rise(index: 2)) }
                 // Der Timer steht im Überblick nur, solange er gebraucht wird – gestartet wird er im Reiter „Fokus, Zwischenablage, Termine".
                 if model.focusRunning || model.focusPaused != nil {
@@ -2046,13 +2056,17 @@ struct WeekRow: View {
     }
 
     private func column(_ day: Date, today: Bool) -> some View {
-        let list = events(on: day)
+        // Heute zählt, was noch kommt: Vorbei ist nur ein Vermerk am Ende, sonst schieben die Termine vom Vormittag
+        // die anstehenden unter „weitere“.
+        let all = events(on: day)
+        let list = today ? all.filter { $0.allDay || $0.end > model.now } : all
+        let gone = all.count - list.count
         return VStack(alignment: .leading, spacing: 6) {
             Text(Self.head.string(from: day).replacingOccurrences(of: ".", with: "", options: [], range: nil).uppercased() + ".")
                 .font(Theme.font(10, .semibold)).foregroundStyle(today ? Theme.accent : Theme.muted)
             Rectangle().fill(today ? Theme.accent.opacity(0.6) : Theme.line).frame(height: 1)
             if list.isEmpty {
-                Text("frei").font(Theme.font(11)).foregroundStyle(Theme.faint)
+                Text(gone > 0 ? "nichts mehr" : "frei").font(Theme.font(11)).foregroundStyle(Theme.faint)
             }
             ForEach(list.prefix(6)) { e in
                 let past = e.end < model.now
@@ -2082,8 +2096,9 @@ struct WeekRow: View {
                 .accessibilityElement(children: .combine)
                 .help("\(e.label(discreet: model.discreet))\(e.role == .none ? "" : " (" + e.role.title + ")") · \(e.allDay ? "ganztägig" : Fmt.time.string(from: e.start) + " – " + Fmt.time.string(from: e.end))")
             }
-            if list.count > 6 {
-                Text("+ \(list.count - 6) weitere").font(Theme.font(10)).foregroundStyle(Theme.faint)
+            let more = [list.count > 6 ? "+ \(list.count - 6) weitere" : nil, gone > 0 ? "\(gone) vorbei" : nil].compactMap { $0 }
+            if !more.isEmpty {
+                Text(more.joined(separator: " · ")).font(Theme.font(10)).foregroundStyle(Theme.faint)
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)

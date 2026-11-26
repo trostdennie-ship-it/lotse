@@ -129,8 +129,11 @@ private struct GeneralPane: View {
                 Toggle("Musik neben dem Dock", isOn: $model.dockMusicOn)
                 Text("Zeigt laufende Musik als Glas-Widget rechts neben dem Dock. Oben bleibt dann nur das Cover.")
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle("Nächster Termin neben dem Dock", isOn: $model.dockEventOn)
+                Text("Zeigt den nächsten Termin links neben dem Dock, mit Knopf zum Beitreten oder Losgehen. Oben in der Insel steht er dann nicht noch einmal.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Ablage neben dem Dock", isOn: $model.dockShelfOn)
-                Text("Zeigt geparkte Dateien links neben dem Dock. Erscheint nur, wenn etwas in der Ablage liegt oder du eine Datei ziehst.")
+                Text("Zeigt geparkte Dateien links neben dem Dock, außen neben dem Termin. Erscheint nur, wenn etwas in der Ablage liegt oder du eine Datei ziehst.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Losgehen") {

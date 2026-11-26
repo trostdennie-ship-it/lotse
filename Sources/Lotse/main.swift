@@ -54,7 +54,7 @@ final class HostView: NSHostingView<IslandView> {
 }
 
 final class IslandController {
-    static let size = CGSize(width: 920, height: 880)
+    static let size = CGSize(width: 920, height: 1400)    // Höhe wird auf den Bildschirm begrenzt; zu knapp schiebt macOS den Inhalt nach oben
     let model: IslandModel
     let panel = IslandPanel()
     private var monitors: [Any] = []
@@ -73,9 +73,9 @@ final class IslandController {
             // Bildschirm ohne Retina scharf genug für Nahaufnahmen ist.
             let k = FilmState.scale
             let film = NSHostingView(rootView: IslandView(model: model)
-                .frame(width: Self.size.width, height: Self.size.height, alignment: .top)
+                .frame(width: Self.size.width, height: 880, alignment: .top)
                 .scaleEffect(k, anchor: .top)
-                .frame(width: Self.size.width * k, height: Self.size.height * k, alignment: .top))
+                .frame(width: Self.size.width * k, height: 880 * k, alignment: .top))
             film.sizingOptions = []
             panel.contentView = film
         } else {
@@ -112,6 +112,8 @@ final class IslandController {
     }
 
     /// Die Insel sitzt auf dem Bildschirm mit der Menüleiste: am Notch, sonst als Pille oben mittig.
+    private var notchShift: CGFloat = 0
+
     func reposition() {
         // Für die Film-Aufnahme: der Bildschirm mit Notch, auch wenn ein anderer der Hauptbildschirm ist.
         guard let s = (FilmState.active ? NSScreen.screens.first { $0.safeAreaInsets.top > 0 } : nil) ?? NSScreen.screens.first else { return }
@@ -121,20 +123,23 @@ final class IslandController {
         if notchH > 0, let l = s.auxiliaryTopLeftArea, let r = s.auxiliaryTopRightArea {
             model.notchWidth = s.frame.width - l.width - r.width
             model.topInset = notchH
+            // Die Aussparung sitzt nicht immer genau in der Bildschirmmitte (MacBook Pro 14": 1,5 pt nach rechts).
+            notchShift = l.width + model.notchWidth / 2 - s.frame.width / 2
         } else {
             model.notchWidth = 0
             model.topInset = min(max(menuH, 26), 34)
+            notchShift = 0
         }
         if FilmState.active {
             // Im Film sitzt die Insel immer an einem Notch – auch wenn dieser Bildschirm keinen hat.
             model.hasNotch = true; model.notchWidth = 185; model.topInset = 32
-            let k = FilmState.scale, w = Self.size.width * k, fh = Self.size.height * k
+            let k = FilmState.scale, w = Self.size.width * k, fh = 880 * k
             panel.setFrame(NSRect(x: s.frame.midX - w / 2, y: s.frame.maxY - fh, width: w, height: fh), display: true)
             panel.orderFrontRegardless()
             return
         }
         let h = min(Self.size.height, s.frame.height)      // nie höher als der Bildschirm
-        panel.setFrame(NSRect(x: s.frame.midX - Self.size.width / 2, y: s.frame.maxY - h,
+        panel.setFrame(NSRect(x: (s.frame.midX + notchShift - Self.size.width / 2).rounded(), y: s.frame.maxY - h,
                               width: Self.size.width, height: h), display: true)
         panel.orderFrontRegardless()
     }
@@ -243,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         if args.contains("--selftest") {
-            let problems = Risk.selfTest() + WindowSnap.selfTest() + ClaudeHooks.selfTest() + Leave.selfTest() + DockSpot.selfTest() + DockShelfLayout.selfTest()
+            let problems = Risk.selfTest() + WindowSnap.selfTest() + ClaudeHooks.selfTest() + Leave.selfTest() + DockSpot.selfTest() + DockShelfLayout.selfTest() + DockEvent.selfTest()
             print(problems.isEmpty ? "Selbsttest: Risiko-Regeln, Einrast-Zonen, Claude-Hooks, Losgehen und Dock-Musik in Ordnung" : problems.joined(separator: "\n"))
             exit(problems.isEmpty ? 0 : 1)
         }
@@ -332,6 +337,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         meeting.start()
         let dockMusic = DockMusicWindow(model: model)
         dockMusic.start()
+        let dockEvent = DockEventWindow(model: model)
+        dockEvent.start()
         let dockShelf = DockShelfWindow(model: model)
         dockShelf.start()
         let away = AwayWatcher(model: model)
@@ -339,7 +346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         model.showAway = { [weak away] since in away?.show(since: since) }
         let leave = LeaveWatcher(model: model)
         leave.start()
-        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe, away, leave, dockMusic, dockShelf]
+        sources = [cal, claude, notes, music, usage, keys, meeting, news, mixer, weather, clipboard, recorder, stats, scribe, away, leave, dockMusic, dockEvent, dockShelf]
         snap.start()
         setupMenu()
         log("Lotse gestartet")
@@ -498,6 +505,18 @@ enum Demo {
                        "/Library/Fonts/Arial Unicode.ttf", "/System/Applications/Calendar.app", "/System/Applications/Notes.app",
                        "/System/Applications/Maps.app"].map { ShelfItem(url: URL(fileURLWithPath: $0), added: Date()) }
             let r = ImageRenderer(content: DockShelfView(model: m).frame(width: DockShelfLayout.width(count: m.shelf.count), height: 72).padding(24)
+                .background(LinearGradient(colors: [Color(red: 0.55, green: 0.62, blue: 0.78), Color(red: 0.80, green: 0.62, blue: 0.55)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing)))
+            r.scale = 2
+            if let img = r.nsImage, let tiff = img.tiffRepresentation,
+               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                try? png.write(to: URL(fileURLWithPath: path))
+            }
+            return
+        }
+        if mode == "dock-event" || mode == "dock-event-leave" {
+            if mode == "dock-event-leave" { m.leave = LeaveCard.demo(now: Date(), minutesToLeave: 5); m.events = [m.leave!.event] }
+            let r = ImageRenderer(content: DockEventView(model: m).frame(width: DockSpot.width, height: 64).padding(24)
                 .background(LinearGradient(colors: [Color(red: 0.55, green: 0.62, blue: 0.78), Color(red: 0.80, green: 0.62, blue: 0.55)],
                                            startPoint: .topLeading, endPoint: .bottomTrailing)))
             r.scale = 2

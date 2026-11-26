@@ -180,13 +180,25 @@ final class DockShelfWindow {
         let screens = NSScreen.screens
         guard !screens.isEmpty else { return }
         var spot: CGRect?
+        var covers = false
         if active, DockMusicWindow.dockNormallyBottom {
             let dock = DockReader.frame()
             if let i = DockSpot.pick(dock: dock, screens: screens.map { ($0.frame, $0.visibleFrame) }) {
-                spot = DockSpot.left(dock: dock, screen: screens[i].frame, visible: screens[i].visibleFrame,
-                                     width: DockShelfLayout.width(count: model.shelf.count))
+                let w = DockShelfLayout.width(count: model.shelf.count)
+                let (screen, visible) = (screens[i].frame, screens[i].visibleFrame)
+                // Steht links schon der Termin, setzt sich die Ablage außen daneben. Reicht der Platz nicht,
+                // liegt sie solange an seiner Stelle.
+                if let ev = DockEventWindow.current, let d = dock,
+                   let outer = DockSpot.left(dock: CGRect(x: ev.minX, y: d.minY, width: d.maxX - ev.minX, height: d.height),
+                                             screen: screen, visible: visible, width: w) {
+                    spot = outer
+                } else {
+                    spot = DockSpot.left(dock: dock, screen: screen, visible: visible, width: w)
+                    covers = DockEventWindow.current != nil && spot != nil
+                }
             }
         }
+        if model.dockShelfCovers != covers { model.dockShelfCovers = covers }
         if let r = spot {
             if panel.frame != r { panel.setFrame(r, display: true, animate: panel.isVisible) }
             if !panel.isVisible {

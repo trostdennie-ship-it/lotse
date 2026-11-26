@@ -433,6 +433,14 @@ final class IslandModel: ObservableObject {
     @Published var dockShelfOn: Bool = UserDefaults.standard.object(forKey: "dockShelfOn") as? Bool ?? true {
         didSet { UserDefaults.standard.set(dockShelfOn, forKey: "dockShelfOn") }
     }
+    /// Nächster Termin als Glas-Widget links neben dem Dock (Einstellungen → Dock).
+    @Published var dockEventOn: Bool = UserDefaults.standard.object(forKey: "dockEventOn") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(dockEventOn, forKey: "dockEventOn") }
+    }
+    /// Der Termin steht unten am Dock: Die Laufschrift oben nennt ihn dann nicht noch einmal.
+    @Published var dockEventHint = false
+    /// Die Ablage hat links keinen Platz mehr neben dem Termin und liegt solange an seiner Stelle.
+    @Published var dockShelfCovers = false
     /// Gerade wird irgendwo eine Datei gezogen.
     @Published var filesDragging = false
     /// Das Widget ist gerade zu sehen.
