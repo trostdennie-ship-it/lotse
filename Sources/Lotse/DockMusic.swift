@@ -13,18 +13,27 @@ struct DockSpot {
     /// `dock`: Rahmen der Dock-Leiste (Cocoa-Koordinaten) oder nil, wenn er sich nicht lesen lässt – dann die Ecke unten rechts.
     /// nil, wenn das Dock nicht dauerhaft unten steht (seitlich, automatisch ausgeblendet, Vollbild) oder kein Platz ist.
     static func frame(dock: CGRect?, screen: CGRect, visible: CGRect) -> CGRect? {
+        place(dock: dock, screen: screen, visible: visible, width: width, leftSide: false)
+    }
+
+    /// Dasselbe links vom Dock (Ablage), mit eigener Breite.
+    static func left(dock: CGRect?, screen: CGRect, visible: CGRect, width: CGFloat) -> CGRect? {
+        place(dock: dock, screen: screen, visible: visible, width: width, leftSide: true)
+    }
+
+    private static func place(dock: CGRect?, screen: CGRect, visible: CGRect, width w: CGFloat, leftSide: Bool) -> CGRect? {
         guard visible.minX <= screen.minX, visible.maxX >= screen.maxX else { return nil }   // Dock links oder rechts
         let strip = visible.minY - screen.minY
         guard strip >= minStrip else { return nil }                                           // Dock unten nicht da oder ausgeblendet
         guard let d = dock else {
-            return CGRect(x: screen.maxX - width - gap, y: screen.minY, width: width, height: strip)
+            return CGRect(x: leftSide ? screen.minX + gap : screen.maxX - w - gap, y: screen.minY, width: w, height: strip)
         }
         // Ein Rahmen außerhalb des Bildschirms gehört zu einem weggeschobenen Dock.
         guard d.minY >= screen.minY - 1, d.maxY <= visible.minY + 8, d.minX >= screen.minX, d.maxX <= screen.maxX else { return nil }
         // Die Glasfläche des Docks endet oben genau am freigehaltenen Streifen und ist etwas höher als die Symbolliste.
         let h = d.height + 2
-        let r = CGRect(x: d.maxX + gap, y: visible.minY - h, width: width, height: h)
-        return r.maxX <= screen.maxX ? r : nil
+        let r = CGRect(x: leftSide ? d.minX - gap - w : d.maxX + gap, y: visible.minY - h, width: w, height: h)
+        return r.minX >= screen.minX && r.maxX <= screen.maxX ? r : nil
     }
 
     /// Mindesthöhe des Dock-Streifens: Ein automatisch ausgeblendetes Dock lässt nur ein paar Punkte frei.
@@ -58,6 +67,10 @@ struct DockSpot {
         let first = (frame: screen, visible: CGRect(x: 0, y: 0, width: 1512, height: 952))
         if pick(dock: CGRect(x: 2000, y: 0, width: 600, height: 70), screens: [first, second]) != 1 { out.append("Dock-Musik: Dock auf dem zweiten Bildschirm nicht gefunden") }
         if pick(dock: nil, screens: [first, second]) != 1 { out.append("Dock-Musik: Bildschirm mit Dock-Streifen nicht gefunden") }
+        check("links neben dem Dock", left(dock: CGRect(x: 400, y: 10, width: 700, height: 70), screen: screen, visible: visible, width: 200),
+              CGRect(x: 192, y: 4, width: 200, height: 72))
+        check("links Ersatz-Ecke", left(dock: nil, screen: screen, visible: visible, width: 200), CGRect(x: 8, y: 0, width: 200, height: 76))
+        check("links kein Platz", left(dock: CGRect(x: 100, y: 10, width: 1300, height: 70), screen: screen, visible: visible, width: 200), nil)
         if pick(dock: nil, screens: [first]) != nil { out.append("Dock-Musik: Vollbild sollte keinen Bildschirm liefern") }
         return out
     }
