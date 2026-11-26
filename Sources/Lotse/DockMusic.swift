@@ -78,7 +78,17 @@ struct DockSpot {
 
 /// Liest den Rahmen der Dock-Leiste über die Bedienungshilfen. Nur lesend, am Dock ändert sich nichts.
 enum DockReader {
+    /// Beide Widgets fragen jede Sekunde; die Bedienungshilfen werden trotzdem höchstens einmal je Sekunde gefragt.
+    private static var cached: (at: Date, frame: CGRect?)?
+
     static func frame() -> CGRect? {
+        if let c = cached, Date().timeIntervalSince(c.at) < 0.9 { return c.frame }
+        let f = read()
+        cached = (Date(), f)
+        return f
+    }
+
+    private static func read() -> CGRect? {
         guard AXIsProcessTrusted(),
               let dock = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first else { return nil }
         let app = AXUIElementCreateApplication(dock.processIdentifier)

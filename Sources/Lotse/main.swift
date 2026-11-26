@@ -243,7 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         if args.contains("--selftest") {
-            let problems = Risk.selfTest() + WindowSnap.selfTest() + ClaudeHooks.selfTest() + Leave.selfTest() + DockSpot.selfTest()
+            let problems = Risk.selfTest() + WindowSnap.selfTest() + ClaudeHooks.selfTest() + Leave.selfTest() + DockSpot.selfTest() + DockShelfLayout.selfTest()
             print(problems.isEmpty ? "Selbsttest: Risiko-Regeln, Einrast-Zonen, Claude-Hooks, Losgehen und Dock-Musik in Ordnung" : problems.joined(separator: "\n"))
             exit(problems.isEmpty ? 0 : 1)
         }

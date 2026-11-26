@@ -12,6 +12,21 @@ enum DockShelfLayout {
     static let padding: CGFloat = 12
     static let shown = 5
 
+    static func selfTest() -> [String] {
+        let url = URL(fileURLWithPath: "/System/Library/Desktop Pictures/Solid Colors/Teal.png")
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        return picture(url) === picture(url) ? [] : ["Ablage am Dock: Vorschau wird jedes Mal neu gelesen"]
+    }
+
+    /// Vorschau oder Symbol, einmal gelesen und gemerkt: Das Feld steht oft stundenlang da und wird ständig neu gezeichnet.
+    private static let pictures = NSCache<NSString, NSImage>()
+    static func picture(_ url: URL) -> NSImage {
+        if let hit = pictures.object(forKey: url.path as NSString) { return hit }
+        let img = (Stow.isImage(url) ? Stow.thumbnail(url, size: 120) : nil) ?? NSWorkspace.shared.icon(forFile: url.path)
+        pictures.setObject(img, forKey: url.path as NSString)
+        return img
+    }
+
     static func width(count: Int) -> CGFloat {
         guard count > 0 else { return 170 }
         let n = CGFloat(min(count, shown))
@@ -53,12 +68,12 @@ struct DockShelfView: View {
         let on = hovered == item.id
         return ZStack {
             Group {
-                if Stow.isImage(item.url), let img = Stow.thumbnail(item.url, size: 120) {
-                    Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
+                if Stow.isImage(item.url) {
+                    Image(nsImage: DockShelfLayout.picture(item.url)).resizable().aspectRatio(contentMode: .fill)
                         .frame(width: DockShelfLayout.tile, height: DockShelfLayout.tile)
                         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 } else {
-                    Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path)).resizable()
+                    Image(nsImage: DockShelfLayout.picture(item.url)).resizable()
                         .frame(width: DockShelfLayout.tile - 4, height: DockShelfLayout.tile - 4)
                 }
             }
