@@ -1092,7 +1092,7 @@ struct TopRow: View {
     static func hasTrail(_ model: IslandModel) -> Bool {
         if case .recording = model.recState { return true }
         return model.discreet || model.unread > 0 || model.focusRunning
-            || model.sessions.contains { $0.status == .working && $0.startedAt != nil }
+            || model.sessions.contains { $0.status == .working && ($0.startedAt != nil || $0.planTotal > 0) }
     }
 
     var body: some View {
@@ -1212,6 +1212,12 @@ struct TopRow: View {
         return ""
     }
 
+    /// Die arbeitende Session für den rechten Flügel: zuerst eine mit Plan, sonst eine mit Startzeit.
+    private var workingForTrail: ClaudeSession? {
+        let w = model.sessions.filter { $0.status == .working }
+        return w.first { $0.planTotal > 0 } ?? w.first { $0.startedAt != nil }
+    }
+
     @ViewBuilder private var trail: some View {
         if model.mode == .expanded {
             if !note.isEmpty {
@@ -1254,13 +1260,63 @@ struct TopRow: View {
                         .font(Theme.bar).monospacedDigit().foregroundStyle(Theme.text)
                 }
             }
-        } else if model.mode == .compact,
-                  let since = model.sessions.first(where: { $0.status == .working && $0.startedAt != nil })?.startedAt {
-            // Statt der Uhr (die steht schon in der Menüleiste): wie lange Claude am laufenden Auftrag arbeitet.
-            TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                Text(Fmt.elapsed(ctx.date.timeIntervalSince(since)))
-                    .font(Theme.bar).monospacedDigit().foregroundStyle(Theme.muted)
-                    .accessibilityLabel("Claude arbeitet seit \(Int(ctx.date.timeIntervalSince(since)) / 60) Minuten")
+        } else if model.mode == .compact, let s = workingForTrail {
+            HStack(spacing: 7) {
+                // Hat Claude einen Plan, füllt sich mit jedem erledigten Schritt ein schmaler Balken.
+                if s.planTotal > 0 {
+                    PlanFill(done: s.planDone, total: s.planTotal)
+                        .help("Schritt \(min(s.planDone + 1, s.planTotal)) von \(s.planTotal)")
+                        .accessibilityLabel("Claude hat \(s.planDone) von \(s.planTotal) Schritten erledigt")
+                }
+                // Statt der Uhr (die steht schon in der Menüleiste): wie lange Claude am laufenden Auftrag arbeitet.
+                if let since = s.startedAt {
+                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                        Text(Fmt.elapsed(ctx.date.timeIntervalSince(since)))
+                            .font(Theme.bar).monospacedDigit().foregroundStyle(Theme.muted)
+                            .accessibilityLabel("Claude arbeitet seit \(Int(ctx.date.timeIntervalSince(since)) / 60) Minuten")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Fortschritt für die Ruhe-Pille im Pixelraster des Boots: drei Reihen quadratischer Punkte,
+/// erledigte Schritte leuchten in der Akzentfarbe, der laufende Schritt glimmt, der Rest bleibt blass.
+struct PlanFill: View {
+    let done: Int
+    let total: Int
+    static let cell: CGFloat = 1.5, gap: CGFloat = 0.5, cols = 20, rows = 3      // dasselbe Raster wie das Boot: 2 pt Schritt, 0,5 pt Spalt
+    static var size: CGSize { CGSize(width: CGFloat(cols) * (cell + gap) - gap, height: CGFloat(rows) * (cell + gap) - gap) }
+    @State private var glow = false
+
+    /// Welche Spalten erledigt sind und bis wohin der laufende Schritt reicht.
+    static func columns(done: Int, total: Int) -> (filled: Int, current: Int) {
+        let n = max(total, 1), d = min(max(done, 0), n)
+        let filled = Int((Double(d) / Double(n) * Double(cols)).rounded())
+        let current = d >= n ? filled : max(filled + 1, Int((Double(d + 1) / Double(n) * Double(cols)).rounded()))
+        return (filled, min(current, cols))
+    }
+
+    var body: some View {
+        let c = Self.columns(done: done, total: total)
+        ZStack {
+            grid { col in col < c.filled ? Theme.accent : col < c.current ? nil : Color.white.opacity(0.16) }
+            grid { col in col >= c.filled && col < c.current ? Theme.accent : nil }
+                .opacity(glow ? 0.75 : 0.25)
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+        .onAppear { withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { glow = true } }
+    }
+
+    private func grid(_ color: @escaping (Int) -> Color?) -> some View {
+        Canvas { g, _ in
+            for col in 0..<Self.cols {
+                guard let fill = color(col) else { continue }
+                for row in 0..<Self.rows {
+                    let r = CGRect(x: CGFloat(col) * (Self.cell + Self.gap), y: CGFloat(row) * (Self.cell + Self.gap), width: Self.cell, height: Self.cell)
+                    g.fill(Path(r), with: .color(fill))
+                }
             }
         }
     }
