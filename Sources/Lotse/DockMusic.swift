@@ -146,6 +146,7 @@ struct DockMusicView: View {
                 .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovered = h ? "cover" : (hovered == "cover" ? nil : hovered) } }
                 Spacer(minLength: 4)
                 HStack(spacing: 2) {
+                    rooms
                     key("backward.fill", "Zurück", 11) { model.musicAction?("previous track") }
                     key(t.isPlaying ? "pause.fill" : "play.fill", t.isPlaying ? "Pause" : "Abspielen", 15) { model.musicAction?("playpause") }
                     key("forward.fill", "Weiter", 11) { model.musicAction?("next track") }
@@ -154,6 +155,58 @@ struct DockMusicView: View {
             .padding(.leading, 12).padding(.trailing, 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .modifier(GlassPiece(shape: RoundedRectangle(cornerRadius: 17, style: .continuous)))
+        }
+    }
+
+    /// Raumwahl über Spotify Connect: Ein Klick zeigt die Geräte (Sonos-Räume, dieser Mac …) und schickt die Musik dorthin.
+    private var rooms: some View {
+        let on = hovered == "rooms"
+        let elsewhere = model.sonosActive != nil || model.spotifyDevices.contains { $0.active && $0.type.lowercased() != "computer" }
+        let speakers = Set(model.sonosRooms.flatMap { $0.name.components(separatedBy: " + ") })
+        let others = model.spotifyDevices.filter { !speakers.contains($0.name) }
+        return Menu {
+            if !model.spotifyConnected {
+                Button("Mit Spotify verbinden …") { model.openSettings?() }
+            } else {
+                if !model.sonosRooms.isEmpty {
+                    Section("Sonos") {
+                        ForEach(model.sonosRooms) { r in
+                            Button { Task { await SpotifyConnect.shared.play(on: r) } } label: {
+                                Label(r.name, systemImage: model.sonosActive == r.id ? "checkmark" : "hifispeaker.fill")
+                            }
+                        }
+                    }
+                }
+                if !others.isEmpty {
+                    Section("Spotify Connect") {
+                        ForEach(others) { d in
+                            Button { Task { await SpotifyConnect.shared.play(on: d) } } label: {
+                                Label(d.name, systemImage: d.active ? "checkmark" : d.symbol)
+                            }
+                        }
+                    }
+                }
+                if model.sonosRooms.isEmpty && others.isEmpty {
+                    Text("Keine Räume gefunden")
+                }
+            }
+        } label: {
+            Image(systemName: elsewhere ? "hifispeaker.2.fill" : "hifispeaker.fill").font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(on ? Theme.onIce : elsewhere ? Theme.accent : Theme.text)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(on ? Color.white.opacity(0.92) : .clear))
+                .scaleEffect(on ? 1.08 : 1)
+                .contentShape(Circle())
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        .help("Raum wählen").accessibilityLabel("Raum wählen")
+        .onHover { h in
+            withAnimation(.easeOut(duration: 0.15)) { hovered = h ? "rooms" : (hovered == "rooms" ? nil : hovered) }
+            // Beim Darüberfahren die Geräteliste auffrischen, damit sie beim Klick stimmt.
+            if h, model.spotifyConnected {
+                Task { await SpotifyConnect.shared.refreshDevices() }
+                Task { await SpotifyConnect.shared.refreshRooms() }
+            }
         }
     }
 

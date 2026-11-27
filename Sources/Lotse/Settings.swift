@@ -136,6 +136,7 @@ private struct GeneralPane: View {
                 Text("Zeigt geparkte Dateien links neben dem Dock, außen neben dem Termin. Erscheint nur, wenn etwas in der Ablage liegt oder du eine Datei ziehst.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            SpotifySection(model: model)
             Section("Losgehen") {
                 Toggle("Rechtzeitig zum Aufbruch erinnern", isOn: $model.leaveOn)
                 Text(model.locationDenied
@@ -412,5 +413,34 @@ private struct HelpPane: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// Spotify Connect: Client-ID eintragen, anmelden, abmelden. Für die Raumwahl im Musik-Widget am Dock.
+private struct SpotifySection: View {
+    @ObservedObject var model: IslandModel
+    @State private var id = SpotifyConnect.shared.clientID
+
+    var body: some View {
+        Section("Musik in andere Räume") {
+            if model.spotifyConnected {
+                HStack {
+                    Label("Mit Spotify verbunden", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    Spacer()
+                    Button("Abmelden") { SpotifyConnect.shared.signOut() }
+                }
+                Text("Über den Lautsprecher-Knopf im Musik-Widget am Dock schickst du die Musik in einen Sonos-Raum oder auf ein anderes Gerät.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                TextField("Client-ID", text: $id).textFieldStyle(.roundedBorder)
+                    .onChange(of: id) { _, v in SpotifyConnect.shared.clientID = v }
+                HStack {
+                    Button("Mit Spotify anmelden") { SpotifyConnect.shared.signIn() }.disabled(id.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Spotify-Entwicklerseite öffnen") { NSWorkspace.shared.open(URL(string: "https://developer.spotify.com/dashboard")!) }
+                }
+                Text("Einmalig: Auf der Entwicklerseite eine App anlegen, bei „Redirect URI“ \(SpotifyConnect.redirect) eintragen und „Web API“ anhaken. Die Client-ID hier einfügen und anmelden. Braucht Spotify Premium.")
+                    .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+        }
     }
 }

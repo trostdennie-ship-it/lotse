@@ -441,6 +441,13 @@ final class IslandModel: ObservableObject {
     @Published var dockEventHint = false
     /// Die Ablage hat links keinen Platz mehr neben dem Termin und liegt solange an seiner Stelle.
     @Published var dockShelfCovers = false
+    /// Spotify Connect: verbunden und die Geräte, auf denen Spotify spielen kann (Sonos-Räume, Mac …).
+    @Published var spotifyConnected = false
+    @Published var spotifyDevices: [SpotifyDevice] = []
+    var openSettings: (() -> Void)?
+    /// Sonos-Räume im WLAN und der Raum, an den Lotse zuletzt übergeben hat.
+    @Published var sonosRooms: [SonosRoom] = []
+    @Published var sonosActive: String?
     /// Gerade wird irgendwo eine Datei gezogen.
     @Published var filesDragging = false
     /// Das Widget ist gerade zu sehen.

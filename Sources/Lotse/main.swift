@@ -248,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         if args.contains("--selftest") {
-            let problems = Risk.selfTest() + WindowSnap.selfTest() + ClaudeHooks.selfTest() + Leave.selfTest() + DockSpot.selfTest() + DockShelfLayout.selfTest() + DockEvent.selfTest()
+            let problems = Risk.selfTest() + WindowSnap.selfTest() + ClaudeHooks.selfTest() + Leave.selfTest() + DockSpot.selfTest() + DockShelfLayout.selfTest() + DockEvent.selfTest() + SpotifyConnect.selfTest() + Sonos.selfTest()
             print(problems.isEmpty ? "Selbsttest: Risiko-Regeln, Einrast-Zonen, Claude-Hooks, Losgehen und Dock-Musik in Ordnung" : problems.joined(separator: "\n"))
             exit(problems.isEmpty ? 0 : 1)
         }
@@ -319,6 +319,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let weather = WeatherSource(model: model)
         weather.start()
         model.askWeatherCity = { [weak self] in self?.openSettings() }
+        model.openSettings = { [weak self] in self?.openSettings() }
+        SpotifyConnect.shared.model = model
+        model.spotifyConnected = SpotifyConnect.shared.connected
         model.showFolders = { [weak self] in self?.showFolders() }
         let meeting = MeetingDetector()
         meeting.calendarHint = { [weak self] in

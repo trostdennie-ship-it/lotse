@@ -37,6 +37,7 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <key>NSSpeechRecognitionUsageDescription</key><string>Lotse schreibt deine Mitschnitte auf diesem Mac mit.</string>
     <key>NSLocationUsageDescription</key><string>Lotse rechnet aus, wann du zu einem Termin losgehen musst.</string>
     <key>NSLocationWhenInUseUsageDescription</key><string>Lotse rechnet aus, wann du zu einem Termin losgehen musst.</string>
+    <key>NSLocalNetworkUsageDescription</key><string>Lotse findet deine Sonos-Räume im WLAN, um Musik dorthin zu schicken.</string>
     <key>NSAppleEventsUsageDescription</key><string>Lotse zeigt und steuert die Musik in Spotify.</string>
 </dict>
 </plist>
