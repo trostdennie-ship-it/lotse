@@ -170,6 +170,39 @@ enum Sonos {
         return nil
     }
 
+    // MARK: Steuern und Zustand
+
+    struct Status: Equatable { var playing: Bool; var title: String; var artist: String; var art: String? }
+
+    /// Was der Raum gerade spielt: Zustand, Titel, Künstler und Cover-Adresse.
+    static func status(_ room: SonosRoom) async -> Status? {
+        guard let t = await soap(room.host, "AVTransport", "GetTransportInfo", "<InstanceID>0</InstanceID>"),
+              let p = await soap(room.host, "AVTransport", "GetPositionInfo", "<InstanceID>0</InstanceID>") else { return nil }
+        return status(transport: t, position: p, host: room.host)
+    }
+
+    static func status(transport: String, position: String, host: String) -> Status {
+        let meta = unescape(first(#"<TrackMetaData>(.*?)</TrackMetaData>"#, position) ?? "")
+        let art = first(#"<upnp:albumArtURI>(.*?)</upnp:albumArtURI>"#, meta).map(unescape)
+        return Status(playing: transport.contains("PLAYING") || transport.contains("TRANSITIONING"),
+                      title: unescape(first(#"<dc:title>(.*?)</dc:title>"#, meta) ?? ""),
+                      artist: unescape(first(#"<dc:creator>(.*?)</dc:creator>"#, meta) ?? ""),
+                      art: art.map { $0.hasPrefix("http") ? $0 : "http://\(host):1400\($0)" })
+    }
+
+    /// Tasten des Widgets auf den Raum umleiten.
+    static func control(_ room: SonosRoom, _ cmd: String, playing: Bool) async {
+        let action: String
+        switch cmd {
+        case "next track": action = "Next"
+        case "previous track": action = "Previous"
+        case "pause": action = "Pause"
+        case "play": action = "Play"
+        default: action = playing ? "Pause" : "Play"
+        }
+        await soap(room.host, "AVTransport", action, action == "Play" ? "<InstanceID>0</InstanceID><Speed>1</Speed>" : "<InstanceID>0</InstanceID>")
+    }
+
     // MARK: UPnP
 
     @discardableResult
@@ -239,6 +272,9 @@ enum Sonos {
         check(tr.uri == "x-sonos-spotify:spotify%3atrack%3aT1?sid=9&flags=8224&sn=1", "Titel-URI \(tr.uri)")
         check(tr.meta.contains("SA_RINCON2311_X_#Svc2311-0-Token"), "Beschreibung ohne Konto")
         check(clock(3725) == "1:02:05", "Zeitformat")
+        let pos = "<TrackMetaData>" + esc(#"<DIDL-Lite><item><dc:title>Song &amp; Co</dc:title><dc:creator>Band</dc:creator><upnp:albumArtURI>/getaa?s=1&amp;u=x</upnp:albumArtURI></item></DIDL-Lite>"#) + "</TrackMetaData>"
+        let st = status(transport: "<CurrentTransportState>PAUSED_PLAYBACK</CurrentTransportState>", position: pos, host: "10.0.0.3")
+        check(st == Status(playing: false, title: "Song & Co", artist: "Band", art: "http://10.0.0.3:1400/getaa?s=1&u=x"), "Zustand gelesen: \(st)")
         return bad
     }
 }

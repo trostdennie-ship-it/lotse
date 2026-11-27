@@ -322,6 +322,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         model.openSettings = { [weak self] in self?.openSettings() }
         SpotifyConnect.shared.model = model
         model.spotifyConnected = SpotifyConnect.shared.connected
+        // Gleich die Sonos-Räume suchen, damit die Tasten einen spielenden Raum steuern können.
+        if model.sonosActive != nil || model.spotifyConnected { Task { await SpotifyConnect.shared.refreshRooms() } }
         model.showFolders = { [weak self] in self?.showFolders() }
         let meeting = MeetingDetector()
         meeting.calendarHint = { [weak self] in

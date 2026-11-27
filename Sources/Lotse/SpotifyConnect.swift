@@ -199,7 +199,12 @@ final class SpotifyConnect {
         guard let p = await playing() else { log("Sonos: In Spotify läuft gerade nichts"); return }
         let ok = await Sonos.play(p, on: room)
         log("Sonos: Übergabe \(ok ? "gelungen" : "fehlgeschlagen") (\(p.context == nil ? "Titel" : "mit Playlist/Album"))")
-        if ok { model?.sonosActive = room.id; model?.musicAction?("pause") }
+        if ok {
+            // Erst Spotify auf dem Mac anhalten, dann gehören die Tasten dem Raum.
+            model?.musicAction?("pause")
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            model?.sonosActive = room.id
+        }
     }
 
     // MARK: Reine Rechnung

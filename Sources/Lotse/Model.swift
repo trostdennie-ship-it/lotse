@@ -447,7 +447,9 @@ final class IslandModel: ObservableObject {
     var openSettings: (() -> Void)?
     /// Sonos-Räume im WLAN und der Raum, an den Lotse zuletzt übergeben hat.
     @Published var sonosRooms: [SonosRoom] = []
-    @Published var sonosActive: String?
+    @Published var sonosActive: String? = UserDefaults.standard.string(forKey: "sonosActive") {
+        didSet { UserDefaults.standard.set(sonosActive, forKey: "sonosActive") }
+    }
     /// Gerade wird irgendwo eine Datei gezogen.
     @Published var filesDragging = false
     /// Das Widget ist gerade zu sehen.

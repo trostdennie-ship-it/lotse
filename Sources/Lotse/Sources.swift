@@ -993,6 +993,11 @@ final class MusicSource {
             forName: Notification.Name("com.spotify.client.PlaybackStateChanged"), object: nil, queue: .main
         ) { [weak self] n in
             guard let self, let info = n.userInfo else { return }
+            if self.model.sonosActive != nil {
+                // Spielt ein Sonos-Raum, zeigt das Widget ihn. Startet die Musik auf dem Mac wieder, gehört alles dem Mac.
+                guard info["Player State"] as? String == "Playing" else { return }
+                self.model.sonosActive = nil
+            }
             let state = info["Player State"] as? String ?? ""
             if state == "Stopped" { self.model.track = nil; return }
             let title = info["Name"] as? String ?? ""
@@ -1009,8 +1014,55 @@ final class MusicSource {
             let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             if app?.bundleIdentifier == Apps.spotify { self?.model.track = nil }
         }
-        model.musicAction = { [weak self] cmd in self?.run("tell application \"Spotify\" to \(cmd)") { _ in } }
+        model.musicAction = { [weak self] cmd in
+            guard let self else { return }
+            if let id = self.model.sonosActive, let room = self.model.sonosRooms.first(where: { $0.id == id }) {
+                let playing = self.model.track?.isPlaying ?? false
+                if cmd == "playpause" { self.model.track?.isPlaying.toggle() }
+                Task { await Sonos.control(room, cmd, playing: playing); try? await Task.sleep(nanoseconds: 600_000_000); self.pollSonos() }
+                return
+            }
+            self.run("tell application \"Spotify\" to \(cmd)") { _ in }
+        }
+        // Spielt ein Sonos-Raum, holt Lotse Titel und Zustand alle drei Sekunden von dort.
+        Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.pollSonos() }
         refresh()
+    }
+
+    private var lastAdopt = Date.distantPast
+
+    private func pollSonos() {
+        if model.sonosActive == nil { adoptSonos(); return }
+        guard let id = model.sonosActive, let room = model.sonosRooms.first(where: { $0.id == id }) else { return }
+        Task { @MainActor in
+            guard let st = await Sonos.status(room), self.model.sonosActive == id else { return }
+            let same = self.model.track?.title == st.title && self.model.track?.artist == st.artist
+            if same, self.model.track?.isPlaying == st.playing { return }
+            self.model.track = Track(title: st.title, artist: st.artist, isPlaying: st.playing,
+                                     artworkURL: st.art, artwork: same ? self.model.track?.artwork : nil)
+            guard !same, let a = st.art, let url = URL(string: a) else { return }
+            if let (data, _) = try? await URLSession.shared.data(from: url), let img = NSImage(data: data),
+               self.model.track?.artworkURL == a { self.model.track?.artwork = img }
+        }
+    }
+
+    /// Läuft auf dem Mac nichts, aber ein Sonos-Raum spielt, übernehmen die Tasten diesen Raum –
+    /// auch wenn die Musik nicht über Lotse dorthin kam. Höchstens alle zehn Sekunden nachsehen.
+    private func adoptSonos() {
+        guard model.spotifyConnected, !(model.track?.isPlaying ?? false), !model.sonosRooms.isEmpty,
+              Date().timeIntervalSince(lastAdopt) > 10 else { return }
+        lastAdopt = Date()
+        let rooms = model.sonosRooms
+        Task { @MainActor in
+            for r in rooms {
+                guard let st = await Sonos.status(r), st.playing else { continue }
+                guard self.model.sonosActive == nil, !(self.model.track?.isPlaying ?? false) else { return }
+                log("Sonos: spielender Raum übernommen")
+                self.model.sonosActive = r.id
+                self.pollSonos()
+                return
+            }
+        }
     }
 
     private var running: Bool {
